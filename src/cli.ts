@@ -2,8 +2,11 @@
 /**
  * dietly-autopilot CLI.
  *
- *   node src/cli.ts dry-run [--days N] [--order ID]   # report only, writes nothing (default)
- *   node src/cli.ts apply   [--days N] [--order ID]   # actually performs the swaps
+ *   node src/cli.ts dry-run [--days N] [--order ID] [--options]   # report only, writes nothing (default)
+ *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
+ *
+ * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
+ * so you can skim each day's menu and decide whether to tweak GUIDELINES.md or pick differently.
  */
 import { loadConfig } from './config.ts';
 import { DietlyClient, HttpError, type Delivery, type MenuMeal, type SwitchOption } from './dietly.ts';
@@ -13,6 +16,7 @@ interface Args {
   mode: 'dry-run' | 'apply';
   days?: number;
   order?: number;
+  showOptions?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -21,6 +25,7 @@ function parseArgs(argv: string[]): Args {
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
     else if (argv[i] === '--order') args.order = Number(argv[++i]);
+    else if (argv[i] === '--options' || argv[i] === '--full') args.showOptions = true;
   }
   return args;
 }
@@ -79,10 +84,36 @@ function isPublished(slots: SlotInput[]): boolean {
   );
 }
 
-function printDay(date: string, decisions: SlotDecision[]): number {
+const fmtKcal = (k: number | null): string => (k != null ? ` (${k} kcal)` : '');
+
+/** Under a slot, list every alternative, marking the chosen and current dishes. */
+function printOptions(slot: SlotInput | undefined, d: SlotDecision): void {
+  if (!slot || !slot.editable || !slot.options.length) return;
+  for (const o of slot.options) {
+    let mark = '·';
+    let note = '';
+    if (o.dietCaloriesMealId === d.chosenId) {
+      mark = '✓';
+      note = d.willChange ? '  ← new pick' : '  ← kept';
+    } else if (o.dietCaloriesMealId === d.currentId && d.willChange) {
+      mark = '✗';
+      note = '  ← current (replaced)';
+    }
+    const variant = o.dietOptionName ? `[${o.dietOptionName}] ` : '';
+    console.log(`         ${mark} ${variant}${o.menuMealName}${fmtKcal(o.kcal)}${note}`);
+  }
+}
+
+function printDay(
+  date: string,
+  slots: SlotInput[],
+  decisions: SlotDecision[],
+  showOptions: boolean,
+): number {
   const changes = decisions.filter((d) => d.willChange);
   const editable = decisions.some((d) => d.editable);
   const sorted = [...decisions].sort((a, b) => slotRank(a.slot) - slotRank(b.slot));
+  const slotByName = new Map(slots.map((s) => [s.current.mealName, s]));
 
   if (!editable) {
     console.log(`\n  ${date}  —  🔒 locked (past edit cutoff)`);
@@ -95,8 +126,10 @@ function printDay(date: string, decisions: SlotDecision[]): number {
       console.log(`    ✏️  ${d.slot}: ${d.currentDish}`);
       console.log(`        → ${d.chosenDish}   [${d.reason}]`);
     } else {
-      console.log(`    ✓  ${d.slot}: ${d.currentDish}`);
+      const why = showOptions && d.reason && d.reason !== 'keep' ? `   [${d.reason}]` : '';
+      console.log(`    ✓  ${d.slot}: ${d.currentDish}${why}`);
     }
+    if (showOptions) printOptions(slotByName.get(d.slot), d);
   }
   return changes.length;
 }
@@ -158,7 +191,7 @@ async function main(): Promise<void> {
             date: delivery.date,
           })
         : keepAllDecisions(slots);
-      totalChanges += printDay(delivery.date, decisions);
+      totalChanges += printDay(delivery.date, slots, decisions, !!args.showOptions);
       for (const d of decisions) {
         if (!d.willChange) continue;
         const meal = slots.find((s) => s.current.mealName === d.slot)!;

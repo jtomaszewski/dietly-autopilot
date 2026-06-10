@@ -41,8 +41,25 @@ cp .env.example .env   # Dietly email + password, and an OpenRouter API key
 # Preview — reads your upcoming menu, prints proposed swaps, writes NOTHING:
 npm run dry-run                 # or: node src/cli.ts dry-run --days 14
 
+# Full daily digest — every slot's pick AND all alternatives, so you can skim and
+# decide whether to tweak GUIDELINES.md or pick something else yourself:
+node src/cli.ts dry-run --days 14 --options
+
 # Actually apply the swaps:
 npm run apply                   # or: node src/cli.ts apply --days 14
+```
+
+With `--options` each slot lists its alternatives, marked `← kept` / `← new pick` /
+`← current (replaced)`, plus the model's one-line reason per slot:
+
+```
+  2026-06-16  —  1 change(s)
+    ✏️  Śniadanie: Sałatka z brzoskwinią, kurczakiem i wegańską fetą
+        → Pasta kanapkowa z awokado i jajka …   [current has vegan feta (never-pick); switched to an egg dish]
+         · [OPTIMAL] Pulled pork w sosie BBQ … (707 kcal)
+         ✓ [NISKI IG] Pasta kanapkowa z awokado i jajka … (736 kcal)  ← new pick
+         ✗ [SPORT] Sałatka z brzoskwinią, kurczakiem i wegańską fetą (717 kcal)  ← current (replaced)
+         · [SLIM] Placuszki z białego sera … (784 kcal)
 ```
 
 Example output:
