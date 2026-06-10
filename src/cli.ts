@@ -7,7 +7,7 @@
  */
 import { loadConfig } from './config.ts';
 import { DietlyClient, HttpError, type Delivery, type MenuMeal, type SwitchOption } from './dietly.ts';
-import { decideDay, type SlotDecision, type SlotInput } from './rules.ts';
+import { decideDayLLM, keepAllDecisions, type SlotDecision, type SlotInput } from './llm.ts';
 
 interface Args {
   mode: 'dry-run' | 'apply';
@@ -125,7 +125,7 @@ async function main(): Promise<void> {
   }
 
   console.log(
-    `Mode: ${args.mode.toUpperCase()}  ·  horizon: ${today} → ${until} (${horizon}d)  ·  orders: ${orders
+    `Mode: ${args.mode.toUpperCase()}  ·  model: ${cfg.model}  ·  horizon: ${today} → ${until} (${horizon}d)  ·  orders: ${orders
       .map((o) => o.orderId)
       .join(', ')}`,
   );
@@ -148,7 +148,16 @@ async function main(): Promise<void> {
         unpublished++;
         continue; // menu for this day isn't out yet
       }
-      const decisions = decideDay(slots);
+      const editable = slots.some((s) => s.editable);
+      const decisions = editable
+        ? await decideDayLLM({
+            slots,
+            guidelines: cfg.guidelines,
+            model: cfg.model,
+            apiKey: cfg.openRouterApiKey,
+            date: delivery.date,
+          })
+        : keepAllDecisions(slots);
       totalChanges += printDay(delivery.date, decisions);
       for (const d of decisions) {
         if (!d.willChange) continue;
