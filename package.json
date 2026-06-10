@@ -1,0 +1,29 @@
+{
+  "name": "dietly-autopilot",
+  "version": "0.1.0",
+  "description": "Automatically pick your Dietly (Wybór Menu) catering meals according to your taste preferences.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jacek Tomaszewski",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jtomaszewski/dietly-autopilot.git"
+  },
+  "bin": {
+    "dietly-autopilot": "src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dry-run": "node src/cli.ts dry-run",
+    "apply": "node src/cli.ts apply",
+    "analyze": "node scripts/analyze-mbox.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
