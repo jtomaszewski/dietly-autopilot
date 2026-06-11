@@ -78,6 +78,20 @@ Example output:
 
 `dry-run` is always safe. `apply` is the only command that writes.
 
+## Web UI
+
+Prefer clicking to typing? There's a tiny local web app (no extra dependencies):
+
+```bash
+npm run serve        # → http://127.0.0.1:4505
+```
+
+Click **Load plan** and it shows each upcoming day with every slot as a dropdown — pre-selected
+to the model's pick and labelled `🤖 suggested` when it proposes a change, with the model's reason
+underneath. **Override any pick** from the dropdown, then hit **Apply changes**. You can also
+view/edit `GUIDELINES.md` right in the browser and reload to re-run the model. Binds to localhost
+only; your Dietly password and OpenRouter key stay server-side.
+
 ## Configuration
 
 `.env` (see `.env.example`):

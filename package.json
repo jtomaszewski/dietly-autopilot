@@ -18,6 +18,7 @@
   "scripts": {
     "dry-run": "node src/cli.ts dry-run",
     "apply": "node src/cli.ts apply",
+    "serve": "node src/server.ts",
     "analyze": "node scripts/analyze-mbox.ts",
     "typecheck": "tsc --noEmit",
     "test": "node --test"

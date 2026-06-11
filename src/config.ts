@@ -9,6 +9,8 @@ export interface Config {
   model: string;
   /** The guidelines markdown, read from disk, handed verbatim to the model. */
   guidelines: string;
+  /** Where the guidelines markdown lives (so the server can re-read/save it live). */
+  guidelinesPath: string;
 }
 
 /** Minimal .env loader (no dependency). Existing process.env wins. */
@@ -57,5 +59,6 @@ export function loadConfig(): Config {
     openRouterApiKey,
     model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash',
     guidelines,
+    guidelinesPath,
   };
 }
