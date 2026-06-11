@@ -48,7 +48,6 @@ function serializeDay(day: PlannedDay) {
           currentId: d.currentId,
           currentName: d.currentDish,
           currentKcal: slot.current.kcal,
-          currentImage: slot.current.image,
           suggestedId: d.chosenId,
           willChange: d.willChange,
           reason: d.reason,
@@ -57,8 +56,6 @@ function serializeDay(day: PlannedDay) {
             name: o.menuMealName,
             variant: o.dietOptionName,
             kcal: o.kcal,
-            image: o.image,
-            allergens: o.allergens,
           })),
         };
       })
@@ -72,52 +69,6 @@ function send(res: ServerResponse, status: number, body: unknown, type = 'applic
   const payload = type === 'application/json' ? JSON.stringify(body) : String(body);
   res.writeHead(status, { 'Content-Type': type });
   res.end(payload);
-}
-
-// Dietly meal photos live on a hotlink-protected CDN (403 unless the request looks like a
-// browser coming from dietly.pl). We proxy them server-side. Allowlisted hosts only (no SSRF).
-const IMG_HOSTS = new Set(['ml-assets.com', 'catering-diet-images.s3.eu-central-1.amazonaws.com']);
-const IMG_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-  Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
-  Referer: 'https://dietly.pl/',
-  'Sec-Fetch-Dest': 'image',
-  'Sec-Fetch-Mode': 'no-cors',
-  'Sec-Fetch-Site': 'cross-site',
-};
-
-const imgCache = new Map<string, { type: string; buf: Buffer }>();
-
-async function proxyImage(raw: string, res: ServerResponse): Promise<void> {
-  let target: URL;
-  try {
-    target = new URL(raw);
-  } catch {
-    return send(res, 400, { error: 'bad url' });
-  }
-  if (target.protocol !== 'https:' || !IMG_HOSTS.has(target.hostname)) {
-    return send(res, 403, { error: 'host not allowed' });
-  }
-  const hit = imgCache.get(target.href);
-  if (hit) {
-    res.writeHead(200, { 'Content-Type': hit.type, 'Cache-Control': 'public, max-age=86400' });
-    return void res.end(hit.buf);
-  }
-  // The CDN (Cloudflare) frequently blocks programmatic/bulk access; this is best-effort.
-  // Fail fast so the page degrades to a placeholder instead of hanging on a blocked request.
-  let upstream: Response;
-  try {
-    upstream = await fetch(target, { headers: IMG_HEADERS, signal: AbortSignal.timeout(6000) });
-  } catch {
-    return send(res, 502, { error: 'upstream unreachable' });
-  }
-  if (!upstream.ok) return send(res, 502, { error: `upstream ${upstream.status}` });
-  const buf = Buffer.from(await upstream.arrayBuffer());
-  const ct = upstream.headers.get('content-type');
-  const type = ct && ct.startsWith('image/') ? ct : target.pathname.endsWith('.png') ? 'image/png' : 'image/jpeg';
-  imgCache.set(target.href, { type, buf });
-  res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'public, max-age=86400' });
-  res.end(buf);
 }
 
 async function readBody(req: IncomingMessage): Promise<any> {
@@ -134,10 +85,6 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && path === '/') {
       return send(res, 200, readFileSync(INDEX, 'utf8'), 'text/html; charset=utf-8');
-    }
-
-    if (req.method === 'GET' && path === '/api/img') {
-      return proxyImage(url.searchParams.get('u') ?? '', res);
     }
 
     if (req.method === 'GET' && path === '/api/config') {

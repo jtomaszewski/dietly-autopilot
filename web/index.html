@@ -36,22 +36,19 @@
       .reason { color:var(--muted); font-size:12.5px; }
       .reason::before { content:"🤖 "; }
 
-      .opts { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }
-      .opt { border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:pointer; background:var(--card);
-             display:flex; flex-direction:column; transition:border-color .12s, box-shadow .12s; position:relative; }
+      .opts { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
+      .opt { border:1px solid var(--line); border-radius:9px; padding:9px 11px; cursor:pointer; background:var(--card);
+             transition:border-color .12s, box-shadow .12s; }
       .opt:hover { border-color:var(--muted); }
       .opt.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
-      .opt .thumb { height:108px; background:#eef0f3; display:flex; align-items:center; justify-content:center; color:#aab; font-size:24px; }
-      .opt .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
-      .opt .body { padding:8px 10px; }
-      .opt .name { font-size:12.5px; line-height:1.35; }
-      .opt .meta { margin-top:5px; font-size:11px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+      .opt-top { display:flex; gap:6px; align-items:center; margin-bottom:5px; min-height:18px; }
+      .opt .name { font-size:13px; line-height:1.35; }
+      .opt.selected .name::before { content:"✓ "; color:var(--accent); font-weight:700; }
+      .opt .meta { margin-top:4px; font-size:11px; color:var(--muted); }
       .variant { font-size:10px; letter-spacing:.04em; padding:1px 6px; border:1px solid var(--line); border-radius:10px; color:var(--muted); }
-      .tag { position:absolute; top:6px; right:6px; font-size:10px; padding:2px 7px; border-radius:20px; font-weight:600; }
+      .tag { font-size:10px; padding:1px 7px; border-radius:20px; font-weight:600; }
       .tag.current { background:#eef0f3; color:#4b5563; }
       .tag.suggested { background:var(--accent); color:#fff; }
-      .opt.selected .check { position:absolute; top:6px; left:6px; width:20px; height:20px; border-radius:50%; background:var(--accent);
-                              color:#fff; font-size:13px; display:flex; align-items:center; justify-content:center; }
       .locked-note { color:var(--muted); font-size:12px; }
 
       #bar { position:sticky; bottom:0; background:var(--card); border-top:1px solid var(--line); padding:12px 20px;
@@ -131,24 +128,14 @@
         }
       }
 
-      function thumb(url) {
-        if (!url) return '<div class="thumb">🍽️</div>';
-        // Dietly's photo CDN is hotlink-protected; go through our server-side proxy.
-        // It's best-effort (Cloudflare often blocks), so degrade cleanly to a placeholder.
-        const proxied = '/api/img?u=' + encodeURIComponent(url);
-        return `<div class="thumb"><img loading="lazy" src="${proxied}" onerror="this.remove();this.parentNode.textContent='🍽️'"></div>`;
-      }
-
       function optionCard(o, selected, isCurrent, isSuggested) {
         const tag = isCurrent ? '<span class="tag current">current</span>'
                   : isSuggested ? '<span class="tag suggested">🤖 suggested</span>' : '';
+        const top = (o.variant ? `<span class="variant">${esc(o.variant)}</span>` : '') + tag;
         return `<div class="opt${selected ? ' selected' : ''}" data-id="${o.id}" role="button" tabindex="0">
-          ${selected ? '<span class="check">✓</span>' : ''}${tag}
-          ${thumb(o.image)}
-          <div class="body">
-            <div class="name">${esc(o.name)}</div>
-            <div class="meta">${o.variant ? `<span class="variant">${esc(o.variant)}</span>` : ''}<span>${kcal(o.kcal)}</span></div>
-          </div>
+          <div class="opt-top">${top}</div>
+          <div class="name">${esc(o.name)}</div>
+          <div class="meta">${kcal(o.kcal)}</div>
         </div>`;
       }
 
@@ -189,7 +176,7 @@
           if (!s.editable) {
             slot.querySelector('.slot-head').insertAdjacentHTML('beforeend', '<span class="locked-note">🔒 locked</span>');
             const opts = document.createElement('div'); opts.className = 'opts';
-            opts.innerHTML = optionCard({ id: s.currentId, name: s.currentName, kcal: s.currentKcal, image: s.currentImage, variant: '' }, true, true, false);
+            opts.innerHTML = optionCard({ id: s.currentId, name: s.currentName, kcal: s.currentKcal, variant: '' }, true, true, false);
             slot.appendChild(opts);
             el.appendChild(slot);
             continue;
@@ -211,12 +198,8 @@
       function selectCard(e, slot) {
         const card = e.target.closest('.opt');
         if (!card) return;
-        slot.querySelectorAll('.opt').forEach((c) => {
-          c.classList.remove('selected');
-          c.querySelector('.check')?.remove();
-        });
+        slot.querySelectorAll('.opt').forEach((c) => c.classList.remove('selected'));
         card.classList.add('selected');
-        card.insertAdjacentHTML('afterbegin', '<span class="check">✓</span>');
         markSlot(slot);
         updatePending();
       }

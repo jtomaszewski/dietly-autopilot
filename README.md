@@ -87,14 +87,10 @@ npm run serve        # → http://127.0.0.1:4505
 ```
 
 Click **Load plan** and it shows each upcoming day; every slot lays out **all its alternatives as
-cards** (variant, kcal, and a photo), with the model's pick highlighted, the others one click away,
-and the reason shown inline. **Override any pick**, then hit **Apply changes**. You can also
-view/edit `GUIDELINES.md` right in the browser and reload to re-run the model. Light theme; binds to
-localhost only; your Dietly password and OpenRouter key stay server-side.
-
-> **Photos:** Dietly's meal-photo CDN is Cloudflare-protected and blocks hotlinking, so the app
-> proxies images server-side on a best-effort basis — they often fall back to a 🍽️ placeholder.
-> The rest of the UI works regardless.
+cards** (variant + kcal), with the model's pick highlighted, the others one click away, and the
+reason shown inline. **Override any pick**, then hit **Apply changes**. You can also view/edit
+`GUIDELINES.md` right in the browser and reload to re-run the model. Light theme; binds to localhost
+only; your Dietly password and OpenRouter key stay server-side.
 
 ## Configuration
 

@@ -14,7 +14,6 @@ function opt(name: string, slot = 'Śniadanie'): SwitchOption {
     allergens: [],
     ingredients: [{ name: 'składnik', major: false }],
     kcal: 500,
-    image: null,
   };
 }
 function asMenu(o: SwitchOption): MenuMeal {
@@ -27,7 +26,6 @@ function asMenu(o: SwitchOption): MenuMeal {
     allergens: o.allergens,
     ingredients: o.ingredients,
     kcal: o.kcal,
-    image: null,
   };
 }
 function slot(current: SwitchOption, alts: SwitchOption[], editable = true): SlotInput {
