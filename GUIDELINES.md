@@ -1,36 +1,36 @@
-# My Dietly meal guidelines
+# Moje wytyczne do posiłków Dietly
 
-Plain-language preferences for the meal picker. Edit freely — this whole file is handed to
-the model, which decides per slot whether to keep the current dish or switch it to one of the
-offered alternatives. Dishes are Polish (catering: Wybór Menu).
+Preferencje napisane prostym językiem dla automatu wybierającego posiłki. Edytuj dowolnie — cały
+ten plik trafia do modelu, który dla każdego posiłku decyduje, czy zostawić obecne danie, czy
+zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: Wybór Menu).
 
-## Never pick (always swap away if currently chosen)
-- **Vege / vegan cheese** — vegan feta, vegan twaróg/cottage cheese, cashew or seed "cheese",
-  vegan mozzarella. Anything that's an imitation of white cheese.
-- **Vege / soy "meat"** — soy cutlets (kotlety sojowe), tofu used as a meat substitute, seitan,
-  vegan versions of meat dishes. (Real soy *sauce* in an otherwise normal dish is fine.)
+## Nigdy nie wybieraj (zawsze zamień, jeśli aktualnie wybrane)
+- **Wegański / wege ser** — wegańska feta, wegański twaróg, „ser" z nerkowców lub nasion,
+  wegańska mozzarella. Cokolwiek, co jest imitacją białego sera.
+- **Wege / sojowe „mięso"** — kotlety sojowe, tofu jako zamiennik mięsa, seitan, wegańskie wersje
+  dań mięsnych. (Zwykły *sos* sojowy w normalnym daniu jest w porządku.)
 
-## Avoid (switch to something better when a good option exists)
-- **Sweet porridge / milk-grain breakfasts** — oatmeal (owsianka), millet porridge (jaglanka),
-  semolina (kasza manna), rice pudding, budyń. I don't enjoy sweet grain breakfasts.
-- **Heavy goulash / stews** — gulasz, potrawka.
+## Unikaj (zamień na coś lepszego, jeśli istnieje dobra opcja)
+- **Słodkie owsianki / kasze na mleku na śniadanie** — owsianka, jaglanka, kasza manna, budyń,
+  ryżanka. Nie lubię słodkich zbożowych śniadań.
+- **Ciężkie gulasze / potrawki** — gulasz, potrawka.
 
-## Prefer (when choosing a replacement, lean toward these — in rough priority order)
-1. **Egg-based dishes** — omelette, frittata, scrambled/egg pastes. My favourite breakfast type.
-2. **Chicken.**
-3. Fish, pasta, beef — all nice to have.
+## Preferuj (przy wyborze zamiennika skłaniaj się ku tym — mniej więcej w kolejności priorytetu)
+1. **Dania na bazie jajek** — omlet, frittata, jajecznica, pasty jajeczne. Mój ulubiony typ śniadania.
+2. **Kurczak.**
+3. Ryby, makaron, wołowina — wszystkie mile widziane.
 
-## Hard constraints
-- **At most one shake / smoothie (koktajl / smoothie) per day.** One shake a day is perfectly
-  fine — leave it alone. Only act when **two or more** of the day's *currently selected* meals are
-  shakes; then keep the single best one and switch the rest to a non-shake option.
+## Twarde ograniczenia
+- **Najwyżej jeden shake / koktajl / smoothie dziennie.** Jeden shake dziennie jest całkowicie
+  w porządku — zostaw go. Reaguj tylko wtedy, gdy **dwa lub więcej** *aktualnie wybranych* posiłków
+  danego dnia to shake'i; wtedy zostaw jeden najlepszy, a resztę zamień na opcje bez shake'a.
 
-## How aggressively to change
-- Default to keeping the current dish. Only change when a guideline clearly calls for it — no
-  needless churn. A fine savory breakfast (eggs, meat, fish) does not need swapping.
-- A "never pick" item must always be swapped away (pick the best allowed alternative even if it's
-  not a favourite). "Avoid" and "prefer" only justify a change when the current dish clearly falls
-  in an avoid category, or a genuinely better-fitting option exists.
-- Egg dishes mean actual eggs (omelette, frittata, egg paste). Cottage cheese (twaróg) is not an
-  egg dish.
-- Balance the day: don't make every slot the same protein if good variety is available.
+## Jak agresywnie zmieniać
+- Domyślnie zostawiaj obecne danie. Zmieniaj tylko wtedy, gdy wyraźnie wynika to z wytycznych —
+  bez zbędnego mieszania. Dobre wytrawne śniadanie (jajka, mięso, ryba) nie wymaga zmiany.
+- Pozycja z listy „nigdy nie wybieraj" musi zawsze zostać zamieniona (wybierz najlepszą dozwoloną
+  alternatywę, nawet jeśli nie jest ulubiona). „Unikaj" i „preferuj" uzasadniają zmianę tylko wtedy,
+  gdy obecne danie wyraźnie należy do kategorii do unikania lub istnieje naprawdę lepiej pasująca opcja.
+- Dania jajeczne oznaczają prawdziwe jajka (omlet, frittata, pasta jajeczna). Twaróg nie jest
+  daniem jajecznym.
+- Równoważ dzień: nie rób każdego posiłku z tego samego białka, jeśli jest dobra różnorodność.
