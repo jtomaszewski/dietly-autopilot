@@ -2,17 +2,22 @@
 /**
  * dietly-autopilot CLI.
  *
- *   node src/cli.ts dry-run [--days N] [--order ID]   # report only, writes nothing (default)
- *   node src/cli.ts apply   [--days N] [--order ID]   # actually performs the swaps
+ *   node src/cli.ts dry-run [--days N] [--order ID] [--options]   # report only, writes nothing (default)
+ *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
+ *
+ * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
+ * so you can skim each day's menu and decide whether to tweak GUIDELINES.md or pick differently.
  */
 import { loadConfig } from './config.ts';
-import { DietlyClient, HttpError, type Delivery, type MenuMeal, type SwitchOption } from './dietly.ts';
-import { decideDay, type SlotDecision, type SlotInput } from './rules.ts';
+import { DietlyClient } from './dietly.ts';
+import type { SlotDecision, SlotInput } from './llm.ts';
+import { applySwaps, buildPlan, type PlannedDay, type SwapRequest } from './planner.ts';
 
 interface Args {
   mode: 'dry-run' | 'apply';
   days?: number;
   order?: number;
+  showOptions?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -21,49 +26,9 @@ function parseArgs(argv: string[]): Args {
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
     else if (argv[i] === '--order') args.order = Number(argv[++i]);
+    else if (argv[i] === '--options' || argv[i] === '--full') args.showOptions = true;
   }
   return args;
-}
-
-function todayISO(): string {
-  // Local date (the catering operates in Europe/Warsaw; running locally there is assumed).
-  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
-}
-
-function addDays(iso: string, n: number): string {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toLocaleDateString('en-CA');
-}
-
-/** Fetch every slot's current meal + switch options for one delivery day. */
-async function gatherDay(
-  client: DietlyClient,
-  orderId: number,
-  delivery: Delivery,
-): Promise<SlotInput[]> {
-  let menu: MenuMeal[];
-  try {
-    menu = await client.getDayMenu(delivery.deliveryId);
-  } catch {
-    return []; // menu not available for this day
-  }
-  const slots: SlotInput[] = [];
-  for (const meal of menu) {
-    let options: SwitchOption[] = [];
-    let editable = false;
-    if (meal.switchable) {
-      try {
-        options = await client.getSwitchOptions(orderId, delivery.deliveryId, meal.deliveryMealId);
-        editable = options.some((o) => o.canBeChanged);
-      } catch (e) {
-        if (!(e instanceof HttpError)) throw e;
-        editable = false; // locked / past cutoff
-      }
-    }
-    slots.push({ current: meal, options, editable });
-  }
-  return slots;
 }
 
 const SLOT_ORDER = ['Śniadanie', 'II Śniadanie', 'Obiad', 'Podwieczorek', 'Kolacja'];
@@ -72,31 +37,46 @@ const slotRank = (s: string) => {
   return i < 0 ? 99 : i;
 };
 
-/** A day's menu is "published" once at least one slot has a real dish name (not just the slot label). */
-function isPublished(slots: SlotInput[]): boolean {
-  return slots.some(
-    (s) => s.current.menuMealName && s.current.menuMealName.toLowerCase() !== s.current.mealName.toLowerCase(),
-  );
+const fmtKcal = (k: number | null): string => (k != null ? ` (${k} kcal)` : '');
+
+/** Under a slot, list every alternative, marking the chosen and current dishes. */
+function printOptions(slot: SlotInput | undefined, d: SlotDecision): void {
+  if (!slot || !slot.editable || !slot.options.length) return;
+  for (const o of slot.options) {
+    let mark = '·';
+    let note = '';
+    if (o.dietCaloriesMealId === d.chosenId) {
+      mark = '✓';
+      note = d.willChange ? '  ← new pick' : '  ← kept';
+    } else if (o.dietCaloriesMealId === d.currentId && d.willChange) {
+      mark = '✗';
+      note = '  ← current (replaced)';
+    }
+    const variant = o.dietOptionName ? `[${o.dietOptionName}] ` : '';
+    console.log(`         ${mark} ${variant}${o.menuMealName}${fmtKcal(o.kcal)}${note}`);
+  }
 }
 
-function printDay(date: string, decisions: SlotDecision[]): number {
-  const changes = decisions.filter((d) => d.willChange);
-  const editable = decisions.some((d) => d.editable);
-  const sorted = [...decisions].sort((a, b) => slotRank(a.slot) - slotRank(b.slot));
+function printDay(day: PlannedDay, showOptions: boolean): number {
+  const changes = day.decisions.filter((d) => d.willChange);
+  const sorted = [...day.decisions].sort((a, b) => slotRank(a.slot) - slotRank(b.slot));
+  const slotByName = new Map(day.slots.map((s) => [s.current.mealName, s]));
 
-  if (!editable) {
-    console.log(`\n  ${date}  —  🔒 locked (past edit cutoff)`);
+  if (!day.editable) {
+    console.log(`\n  ${day.date}  —  🔒 locked (past edit cutoff)`);
     return 0;
   }
 
-  console.log(`\n  ${date}  —  ${changes.length ? `${changes.length} change(s)` : 'no changes'}`);
+  console.log(`\n  ${day.date}  —  ${changes.length ? `${changes.length} change(s)` : 'no changes'}`);
   for (const d of sorted) {
     if (d.willChange) {
       console.log(`    ✏️  ${d.slot}: ${d.currentDish}`);
       console.log(`        → ${d.chosenDish}   [${d.reason}]`);
     } else {
-      console.log(`    ✓  ${d.slot}: ${d.currentDish}`);
+      const why = showOptions && d.reason && d.reason !== 'keep' ? `   [${d.reason}]` : '';
+      console.log(`    ✓  ${d.slot}: ${d.currentDish}${why}`);
     }
+    if (showOptions) printOptions(slotByName.get(d.slot), d);
   }
   return changes.length;
 }
@@ -110,57 +90,43 @@ async function main(): Promise<void> {
   console.log(`Logging in as ${cfg.email} …`);
   await client.login(cfg.email, cfg.password);
 
-  const today = todayISO();
-  const until = addDays(today, horizon);
+  const today = new Date().toLocaleDateString('en-CA');
+  const { orders, days, unpublishedByOrder } = await buildPlan(client, cfg, {
+    days: horizon,
+    order: args.order,
+  });
 
-  const orders = (await client.getActiveOrders()).filter(
-    (o) =>
-      o.companyName === cfg.companyId &&
-      o.dateTo >= today &&
-      (!args.order || o.orderId === args.order),
-  );
   if (!orders.length) {
     console.log('No active orders found for', cfg.companyId);
     return;
   }
 
   console.log(
-    `Mode: ${args.mode.toUpperCase()}  ·  horizon: ${today} → ${until} (${horizon}d)  ·  orders: ${orders
+    `Mode: ${args.mode.toUpperCase()}  ·  model: ${cfg.model}  ·  from ${today} (${horizon}d)  ·  orders: ${orders
       .map((o) => o.orderId)
       .join(', ')}`,
   );
 
-  const pendingSwaps: Array<{ orderId: number; deliveryId: number; d: SlotDecision; deliveryMealId: number }> = [];
+  const pendingSwaps: SwapRequest[] = [];
   let totalChanges = 0;
 
   for (const order of orders) {
-    const { deliveries } = await client.getOrder(order.orderId);
-    const upcoming = (deliveries ?? [])
-      .filter((d) => !d.deleted && d.date >= today && d.date <= until)
-      .sort((a, b) => a.date.localeCompare(b.date));
-
     console.log(`\n=== Order #${order.orderId} (${order.dietName}, ${order.dietCalories} kcal) ===`);
-
-    let unpublished = 0;
-    for (const delivery of upcoming) {
-      const slots = await gatherDay(client, order.orderId, delivery);
-      if (!slots.length || !isPublished(slots)) {
-        unpublished++;
-        continue; // menu for this day isn't out yet
-      }
-      const decisions = decideDay(slots);
-      totalChanges += printDay(delivery.date, decisions);
-      for (const d of decisions) {
+    for (const day of days.filter((d) => d.orderId === order.orderId)) {
+      totalChanges += printDay(day, !!args.showOptions);
+      for (const d of day.decisions) {
         if (!d.willChange) continue;
-        const meal = slots.find((s) => s.current.mealName === d.slot)!;
+        const meal = day.slots.find((s) => s.current.mealName === d.slot)!;
         pendingSwaps.push({
           orderId: order.orderId,
-          deliveryId: delivery.deliveryId,
-          d,
+          deliveryId: day.deliveryId,
           deliveryMealId: meal.current.deliveryMealId,
+          dietCaloriesMealId: d.chosenId,
+          label: `${day.date} ${d.slot} → ${d.chosenDish}`,
         });
       }
     }
+    const unpublished = unpublishedByOrder.get(order.orderId) ?? 0;
     if (unpublished) {
       console.log(`\n  (+${unpublished} day(s) ahead whose menu isn't published yet — skipped)`);
     }
@@ -173,24 +139,17 @@ async function main(): Promise<void> {
     console.log('DRY RUN — nothing was written. Re-run with `apply` to make these changes.');
     return;
   }
-
   if (!pendingSwaps.length) {
     console.log('Nothing to apply.');
     return;
   }
 
   console.log('Applying …');
-  let ok = 0;
-  for (const s of pendingSwaps) {
-    try {
-      await client.swapMeal(s.orderId, s.deliveryId, s.deliveryMealId, s.d.chosenId);
-      console.log(`  ✅ ${s.d.slot} → ${s.d.chosenDish}`);
-      ok++;
-    } catch (e) {
-      console.log(`  ❌ ${s.d.slot} → ${s.d.chosenDish}: ${(e as Error).message}`);
-    }
+  const results = await applySwaps(client, pendingSwaps);
+  for (const r of results) {
+    console.log(`  ${r.ok ? '✅' : '❌'} ${r.label ?? ''}${r.error ? `: ${r.error}` : ''}`);
   }
-  console.log(`Applied ${ok}/${pendingSwaps.length} changes.`);
+  console.log(`Applied ${results.filter((r) => r.ok).length}/${results.length} changes.`);
 }
 
 main().catch((e) => {

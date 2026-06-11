@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dietly-autopilot</title>
+    <style>
+      :root {
+        --bg:#f5f6f8; --card:#ffffff; --line:#e3e6ec; --fg:#1c2230; --muted:#6b7280;
+        --accent:#1f9d57; --accent-soft:#e7f6ee; --change:#2563eb; --change-soft:#eaf0ff; --warn:#b8860b;
+      }
+      * { box-sizing: border-box; }
+      body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--fg); }
+      header { position:sticky; top:0; z-index:5; background:var(--card); padding:14px 20px; border-bottom:1px solid var(--line);
+               display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+      h1 { font-size:18px; margin:0; }
+      .muted { color:var(--muted); }
+      main { padding:20px; max-width:1080px; margin:0 auto; }
+      button { background:var(--card); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:8px 14px; cursor:pointer; font:inherit; }
+      button:hover:not(:disabled) { border-color:var(--accent); }
+      button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
+      button:disabled { opacity:.45; cursor:default; }
+      input[type=number] { width:60px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px; font:inherit; }
+
+      .order-h { margin:22px 0 4px; font-size:14px; color:var(--muted); }
+      .day { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
+      .day > h3 { margin:0 0 6px; font-size:16px; display:flex; gap:10px; align-items:baseline; }
+      .badge { font-size:11px; padding:2px 9px; border-radius:20px; border:1px solid var(--line); color:var(--muted); }
+      .badge.change { color:var(--change); border-color:var(--change); background:var(--change-soft); }
+
+      .slot { padding:12px 0; border-top:1px solid var(--line); }
+      .slot:first-of-type { border-top:none; }
+      .slot-head { display:flex; gap:10px; align-items:baseline; margin-bottom:8px; }
+      .slot-name { font-weight:600; min-width:108px; }
+      .slot-name.changed { color:var(--change); }
+      .reason { color:var(--muted); font-size:12.5px; }
+      .reason::before { content:"🤖 "; }
+
+      .opts { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:8px; }
+      .opt { border:1px solid var(--line); border-radius:9px; padding:9px 11px; cursor:pointer; background:var(--card);
+             transition:border-color .12s, box-shadow .12s; }
+      .opt:hover { border-color:var(--muted); }
+      .opt.selected { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft); }
+      .opt-top { display:flex; gap:6px; align-items:center; margin-bottom:5px; min-height:18px; }
+      .opt .name { font-size:13px; line-height:1.35; }
+      .opt.selected .name::before { content:"✓ "; color:var(--accent); font-weight:700; }
+      .opt .meta { margin-top:4px; font-size:11px; color:var(--muted); }
+      .variant { font-size:10px; letter-spacing:.04em; padding:1px 6px; border:1px solid var(--line); border-radius:10px; color:var(--muted); }
+      .tag { font-size:10px; padding:1px 7px; border-radius:20px; font-weight:600; }
+      .tag.current { background:#eef0f3; color:#4b5563; }
+      .tag.suggested { background:var(--accent); color:#fff; }
+      .locked-note { color:var(--muted); font-size:12px; }
+
+      #bar { position:sticky; bottom:0; background:var(--card); border-top:1px solid var(--line); padding:12px 20px;
+             display:flex; gap:14px; align-items:center; }
+      details { margin:6px 0 0; } summary { cursor:pointer; color:var(--muted); }
+      textarea { width:100%; height:300px; margin-top:8px; background:var(--card); color:var(--fg); border:1px solid var(--line);
+                 border-radius:8px; padding:10px; font:13px ui-monospace, monospace; }
+      .ok { color:var(--accent); } .err { color:#c0392b; }
+      .spinner { display:inline-block; width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--accent);
+                 border-radius:50%; animation:spin .8s linear infinite; vertical-align:-2px; }
+      @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🥗 dietly-autopilot</h1>
+      <span class="muted" id="modelInfo"></span>
+      <span style="flex:1"></span>
+      <label class="muted">days <input type="number" id="days" value="14" min="1" max="40" /></label>
+      <button id="loadBtn" class="primary">Load plan</button>
+      <span id="status" class="muted"></span>
+    </header>
+
+    <main>
+      <details id="guidelinesBox">
+        <summary>Guidelines (what the model optimizes for) — click to view / edit</summary>
+        <textarea id="guidelines" spellcheck="false"></textarea>
+        <button id="saveGuidelines">Save guidelines</button>
+        <span id="guidelinesStatus" class="muted"></span>
+      </details>
+      <div id="plan"></div>
+    </main>
+
+    <div id="bar">
+      <button id="applyBtn" class="primary" disabled>Apply changes</button>
+      <span id="pending" class="muted">No plan loaded.</span>
+      <span id="applyStatus"></span>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+      const kcal = (k) => (k != null ? `${k} kcal` : '');
+      let plan = null;
+
+      async function api(path, opts) {
+        const res = await fetch(path, opts);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        return data;
+      }
+
+      // ---- guidelines ----
+      $('guidelinesBox').addEventListener('toggle', async (e) => {
+        if (e.target.open && !$('guidelines').value) $('guidelines').value = (await api('/api/guidelines')).text;
+      });
+      $('saveGuidelines').onclick = async () => {
+        $('guidelinesStatus').textContent = 'saving…';
+        await api('/api/guidelines', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ text: $('guidelines').value }) });
+        $('guidelinesStatus').textContent = 'saved ✓ — reload the plan to re-run the model';
+      };
+
+      // ---- plan ----
+      $('loadBtn').onclick = loadPlan;
+      async function loadPlan() {
+        $('loadBtn').disabled = true;
+        $('status').innerHTML = '<span class="spinner"></span> asking the model (~1 min)…';
+        $('plan').innerHTML = '';
+        try {
+          plan = await api('/api/plan', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ days: Number($('days').value) }) });
+          render();
+          $('status').textContent = '';
+        } catch (e) {
+          $('status').innerHTML = '<span class="err">' + esc(e.message) + '</span>';
+        } finally {
+          $('loadBtn').disabled = false;
+        }
+      }
+
+      function optionCard(o, selected, isCurrent, isSuggested) {
+        const tag = isCurrent ? '<span class="tag current">current</span>'
+                  : isSuggested ? '<span class="tag suggested">🤖 suggested</span>' : '';
+        const top = (o.variant ? `<span class="variant">${esc(o.variant)}</span>` : '') + tag;
+        return `<div class="opt${selected ? ' selected' : ''}" data-id="${o.id}" role="button" tabindex="0">
+          <div class="opt-top">${top}</div>
+          <div class="name">${esc(o.name)}</div>
+          <div class="meta">${kcal(o.kcal)}</div>
+        </div>`;
+      }
+
+      function render() {
+        const root = $('plan');
+        root.innerHTML = '';
+        if (!plan.orders.length) { root.textContent = 'No active orders.'; return; }
+        for (const order of plan.orders) {
+          const h = document.createElement('div');
+          h.className = 'order-h';
+          h.textContent = `Order #${order.orderId} — ${order.dietName}, ${order.dietCalories} kcal`;
+          root.appendChild(h);
+          for (const day of plan.days.filter((d) => d.orderId === order.orderId)) root.appendChild(renderDay(day));
+          const u = plan.unpublished[order.orderId] || 0;
+          if (u) { const n = document.createElement('div'); n.className = 'muted'; n.style.margin = '4px 0 0 2px'; n.textContent = `+${u} day(s) ahead not published yet`; root.appendChild(n); }
+        }
+        updatePending();
+      }
+
+      function renderDay(day) {
+        const el = document.createElement('div');
+        el.className = 'day';
+        const willChange = day.slots.filter((s) => s.editable && s.suggestedId !== s.currentId).length;
+        el.innerHTML = `<h3>${day.date} ${day.editable
+          ? `<span class="badge ${willChange ? 'change' : ''}">${willChange ? willChange + ' suggested change(s)' : 'no changes'}</span>`
+          : '<span class="badge">🔒 locked</span>'}</h3>`;
+
+        for (const s of day.slots) {
+          const slot = document.createElement('div');
+          slot.className = 'slot';
+          if (s.editable) {
+            slot.dataset.order = day.orderId; slot.dataset.delivery = day.deliveryId;
+            slot.dataset.mealid = s.deliveryMealId; slot.dataset.current = s.currentId;
+          }
+          const reason = s.reason && (s.willChange || s.reason !== 'keep') ? `<span class="reason">${esc(s.reason)}</span>` : '';
+          slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}</div>`;
+
+          if (!s.editable) {
+            slot.querySelector('.slot-head').insertAdjacentHTML('beforeend', '<span class="locked-note">🔒 locked</span>');
+            const opts = document.createElement('div'); opts.className = 'opts';
+            opts.innerHTML = optionCard({ id: s.currentId, name: s.currentName, kcal: s.currentKcal, variant: '' }, true, true, false);
+            slot.appendChild(opts);
+            el.appendChild(slot);
+            continue;
+          }
+
+          const opts = document.createElement('div'); opts.className = 'opts';
+          opts.innerHTML = s.options
+            .map((o) => optionCard(o, o.id === s.suggestedId, o.id === s.currentId, o.id === s.suggestedId && s.suggestedId !== s.currentId))
+            .join('');
+          slot.appendChild(opts);
+          opts.addEventListener('click', (e) => selectCard(e, slot));
+          opts.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectCard(e, slot); } });
+          el.appendChild(slot);
+          markSlot(slot);
+        }
+        return el;
+      }
+
+      function selectCard(e, slot) {
+        const card = e.target.closest('.opt');
+        if (!card) return;
+        slot.querySelectorAll('.opt').forEach((c) => c.classList.remove('selected'));
+        card.classList.add('selected');
+        markSlot(slot);
+        updatePending();
+      }
+
+      function selectedId(slot) { return slot.querySelector('.opt.selected')?.dataset.id; }
+      function markSlot(slot) {
+        const changed = selectedId(slot) !== slot.dataset.current;
+        slot.querySelector('.slot-name').classList.toggle('changed', changed);
+      }
+
+      function collectSwaps() {
+        return [...document.querySelectorAll('.slot[data-mealid]')]
+          .filter((s) => selectedId(s) && selectedId(s) !== s.dataset.current)
+          .map((s) => ({
+            orderId: Number(s.dataset.order), deliveryId: Number(s.dataset.delivery),
+            deliveryMealId: Number(s.dataset.mealid), dietCaloriesMealId: Number(selectedId(s)),
+            label: s.querySelector('.opt.selected .name').textContent,
+          }));
+      }
+
+      function updatePending() {
+        const n = collectSwaps().length;
+        $('pending').textContent = n ? `${n} change(s) selected` : 'No changes selected.';
+        $('applyBtn').disabled = n === 0;
+      }
+
+      // ---- apply ----
+      $('applyBtn').onclick = async () => {
+        const swaps = collectSwaps();
+        if (!confirm(`Apply ${swaps.length} change(s) to your Dietly order?`)) return;
+        $('applyBtn').disabled = true;
+        $('applyStatus').innerHTML = '<span class="spinner"></span> applying…';
+        try {
+          const { results } = await api('/api/apply', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ swaps }) });
+          const ok = results.filter((r) => r.ok).length;
+          $('applyStatus').innerHTML = `<span class="${ok === results.length ? 'ok' : 'err'}">applied ${ok}/${results.length}</span>`;
+          await loadPlan();
+        } catch (e) {
+          $('applyStatus').innerHTML = '<span class="err">' + esc(e.message) + '</span>';
+          $('applyBtn').disabled = false;
+        }
+      };
+
+      api('/api/config').then((c) => { $('modelInfo').textContent = `model: ${c.model} · ${c.companyId}`; $('days').value = c.horizonDays; });
+    </script>
+  </body>
+</html>

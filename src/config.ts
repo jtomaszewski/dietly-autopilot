@@ -5,6 +5,12 @@ export interface Config {
   password: string;
   companyId: string;
   horizonDays: number;
+  openRouterApiKey: string;
+  model: string;
+  /** The guidelines markdown, read from disk, handed verbatim to the model. */
+  guidelines: string;
+  /** Where the guidelines markdown lives (so the server can re-read/save it live). */
+  guidelinesPath: string;
 }
 
 /** Minimal .env loader (no dependency). Existing process.env wins. */
@@ -32,10 +38,27 @@ export function loadConfig(): Config {
       'Missing credentials. Set DIETLY_EMAIL and DIETLY_PASSWORD (copy .env.example to .env).',
     );
   }
+  const openRouterApiKey = process.env.OPENROUTER_API_KEY;
+  if (!openRouterApiKey) {
+    throw new Error('Missing OPENROUTER_API_KEY (the model makes the meal decisions). See .env.example.');
+  }
+
+  const guidelinesPath = process.env.DIETLY_GUIDELINES_PATH ?? 'GUIDELINES.md';
+  let guidelines: string;
+  try {
+    guidelines = readFileSync(guidelinesPath, 'utf8');
+  } catch {
+    throw new Error(`Could not read guidelines file at "${guidelinesPath}". Set DIETLY_GUIDELINES_PATH or create GUIDELINES.md.`);
+  }
+
   return {
     email,
     password,
     companyId: process.env.DIETLY_COMPANY_ID ?? 'wybormenu',
     horizonDays: Number(process.env.DIETLY_HORIZON_DAYS ?? '14'),
+    openRouterApiKey,
+    model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash',
+    guidelines,
+    guidelinesPath,
   };
 }
