@@ -11,8 +11,9 @@ zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: 
   dań mięsnych. (Zwykły *sos* sojowy w normalnym daniu jest w porządku.)
 
 ## Unikaj (zamień na coś lepszego, jeśli istnieje dobra opcja)
-- **Słodkie owsianki / kasze na mleku na śniadanie** — owsianka, jaglanka, kasza manna, budyń,
-  ryżanka. Nie lubię słodkich zbożowych śniadań.
+- **Słodkie owsianki i kasze na śniadanie** — konkretnie: owsianka, jaglanka, kasza manna.
+  Tych nie lubię. **Wyjątki, które są OK (nie zamieniaj):** budyń, ryżanka / pudding ryżowy oraz
+  dania z ryżu na mleku (np. „kakaowy ryż na mleku") — ryż jest w porządku.
 - **Ciężkie gulasze / potrawki** — gulasz, potrawka.
 
 ## Preferuj (przy wyborze zamiennika skłaniaj się ku tym — mniej więcej w kolejności priorytetu)
