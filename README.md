@@ -86,11 +86,15 @@ Prefer clicking to typing? There's a tiny local web app (no extra dependencies):
 npm run serve        # → http://127.0.0.1:4505
 ```
 
-Click **Load plan** and it shows each upcoming day with every slot as a dropdown — pre-selected
-to the model's pick and labelled `🤖 suggested` when it proposes a change, with the model's reason
-underneath. **Override any pick** from the dropdown, then hit **Apply changes**. You can also
-view/edit `GUIDELINES.md` right in the browser and reload to re-run the model. Binds to localhost
-only; your Dietly password and OpenRouter key stay server-side.
+Click **Load plan** and it shows each upcoming day; every slot lays out **all its alternatives as
+cards** (variant, kcal, and a photo), with the model's pick highlighted, the others one click away,
+and the reason shown inline. **Override any pick**, then hit **Apply changes**. You can also
+view/edit `GUIDELINES.md` right in the browser and reload to re-run the model. Light theme; binds to
+localhost only; your Dietly password and OpenRouter key stay server-side.
+
+> **Photos:** Dietly's meal-photo CDN is Cloudflare-protected and blocks hotlinking, so the app
+> proxies images server-side on a best-effort basis — they often fall back to a 🍽️ placeholder.
+> The rest of the UI works regardless.
 
 ## Configuration
 

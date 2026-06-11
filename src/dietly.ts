@@ -46,6 +46,7 @@ export interface MenuMeal {
   allergens: string[];
   ingredients: Ingredient[];
   kcal: number | null;
+  image: string | null;
 }
 
 /** A candidate the slot can be switched to. */
@@ -58,6 +59,7 @@ export interface SwitchOption {
   allergens: string[];
   ingredients: Ingredient[];
   kcal: number | null;
+  image: string | null;
 }
 
 function ingredients(raw: unknown): Ingredient[] {
@@ -83,6 +85,7 @@ function normalizeMenuMeal(m: any): MenuMeal {
     allergens: Array.isArray(m.allergens) ? m.allergens.map(String) : [],
     ingredients: ingredients(m.ingredients),
     kcal: kcalOf(m.nutrition),
+    image: m.menuMealImageUrl ? String(m.menuMealImageUrl) : null,
   };
 }
 
@@ -97,6 +100,7 @@ function normalizeOption(o: any): SwitchOption {
     allergens: Array.isArray(d.allergens) ? d.allergens.map(String) : [],
     ingredients: ingredients(d.ingredients),
     kcal: kcalOf(d.nutrition),
+    image: d.image ? String(d.image) : null,
   };
 }
 
