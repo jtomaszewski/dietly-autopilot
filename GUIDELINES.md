@@ -15,6 +15,11 @@ zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: 
   Tych nie lubię. **Wyjątki, które są OK (nie zamieniaj):** budyń, ryżanka / pudding ryżowy oraz
   dania z ryżu na mleku (np. „kakaowy ryż na mleku") — ryż jest w porządku.
 - **Ciężkie gulasze / potrawki** — gulasz, potrawka.
+- **Kasza jako dodatek** — kasza (gryczana, pęczak, jaglana itp.) jako baza/dodatek do obiadu lub
+  kolacji nuży mi się ostatnio. Nie banuj jej, ale jeśli danie w slocie ma kaszę jako główny
+  dodatek i wśród opcji jest porównywalnie dobre danie z innym dodatkiem (ryż, ziemniaki, makaron),
+  skłaniaj się ku zamianie na opcję bez kaszy. Jeśli dwa posiłki w tym samym dniu mają kaszę,
+  zostaw jeden, a drugi zamień na opcję bez kaszy, o ile istnieje dobra alternatywa.
 
 ## Preferuj (przy wyborze zamiennika skłaniaj się ku tym — mniej więcej w kolejności priorytetu)
 1. **Dania na bazie jajek** — omlet, frittata, jajecznica, pasty jajeczne. Mój ulubiony typ śniadania.
