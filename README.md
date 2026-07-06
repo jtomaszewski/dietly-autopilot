@@ -98,11 +98,15 @@ what you ended up with. See "Run history" below.
 
 ## Run history
 
-Every `dry-run` and `apply` (CLI **and** web) appends a snapshot to `data/snapshots.jsonl`
-(append-only JSONL, gitignored, zero deps) recording, per day/slot: the current dish, **all**
-alternatives that were offered, the model's pick + reason, and — for applies — what was committed.
-Right after an `apply` succeeds it also re-fetches the resulting menu (no model call) and logs a
-`post-apply` snapshot, so the log confirms the swaps actually stuck.
+Every `dry-run` and `apply` (CLI **and** web) appends a snapshot to `~/.dietly-autopilot/snapshots.jsonl`
+(append-only JSONL, zero deps) recording, per day/slot: the current dish, **all** alternatives that
+were offered, the model's pick + reason, and — for applies — what was committed. Right after an
+`apply` succeeds it also re-fetches the resulting menu (no model call) and logs a `post-apply`
+snapshot, so the log confirms the swaps actually stuck.
+
+The log lives in your home dir (not the repo) on purpose: one shared history across every checkout
+and git worktree. Point `DIETLY_LOG_PATH` at a repo-relative path if you'd rather keep it per-clone —
+but note such a file is gitignored and won't be shared between worktrees.
 
 The web UI's **History** section collapses this into one entry per delivery date. It shows the
 current state (post-apply where applicable), and when you **overrode** the model in the UI it marks
@@ -124,7 +128,7 @@ via `DIETLY_LOG_PATH`.
 | `DIETLY_COMPANY_ID` | `wybormenu` | catering slug (Dietly `company-id` header) |
 | `DIETLY_HORIZON_DAYS` | `14` | how many days ahead to consider |
 | `DIETLY_GUIDELINES_PATH` | `GUIDELINES.md` | path to your guidelines markdown |
-| `DIETLY_LOG_PATH` | `data/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History** |
+| `DIETLY_LOG_PATH` | `~/.dietly-autopilot/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History**; shared across all checkouts/worktrees |
 
 Your guidelines live in [`GUIDELINES.md`](GUIDELINES.md) — plain English. One LLM call is made
 per editable day (all five slots together, so the per-day shake cap is reasoned about holistically),

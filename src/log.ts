@@ -7,13 +7,19 @@
  * committed. Logging failures are swallowed — they must never break a dry-run or an apply.
  */
 import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import type { Plan, PlannedDay, SwapResult } from './planner.ts';
 
 const SLOT_ORDER = ['Śniadanie', 'II Śniadanie', 'Obiad', 'Podwieczorek', 'Kolacja'];
 
+/**
+ * Where the run log lives. Defaults to `~/.dietly-autopilot/snapshots.jsonl` — a single location
+ * shared by every checkout / git worktree, so your meal history is never fragmented across them
+ * (a repo-relative `data/` file is gitignored and therefore lives only inside one working dir).
+ */
 export function logPath(): string {
-  return process.env.DIETLY_LOG_PATH ?? 'data/snapshots.jsonl';
+  return process.env.DIETLY_LOG_PATH ?? join(homedir(), '.dietly-autopilot', 'snapshots.jsonl');
 }
 
 // ---- Record shapes ------------------------------------------------------------------------
