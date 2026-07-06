@@ -73,7 +73,7 @@ export interface Plan {
 export async function buildPlan(
   client: DietlyClient,
   cfg: Pick<Config, 'companyId' | 'guidelines' | 'model' | 'openRouterApiKey'>,
-  opts: { days: number; order?: number },
+  opts: { days: number; order?: number; decide?: boolean },
 ): Promise<Plan> {
   const today = todayISO();
   const until = addDays(today, opts.days);
@@ -99,15 +99,17 @@ export async function buildPlan(
         continue;
       }
       const editable = slots.some((s) => s.editable);
-      const decisions = editable
-        ? await decideDayLLM({
-            slots,
-            guidelines: cfg.guidelines,
-            model: cfg.model,
-            apiKey: cfg.openRouterApiKey,
-            date: delivery.date,
-          })
-        : keepAllDecisions(slots);
+      // decide:false skips the LLM (used for cheap post-apply confirmation snapshots).
+      const decisions =
+        editable && opts.decide !== false
+          ? await decideDayLLM({
+              slots,
+              guidelines: cfg.guidelines,
+              model: cfg.model,
+              apiKey: cfg.openRouterApiKey,
+              date: delivery.date,
+            })
+          : keepAllDecisions(slots);
       days.push({ orderId: order.orderId, date: delivery.date, deliveryId: delivery.deliveryId, editable, slots, decisions });
     }
     unpublishedByOrder.set(order.orderId, unpublished);
@@ -125,6 +127,8 @@ export interface SwapRequest {
   /** delivery date + slot name — carried through only so applies can be logged (unused by the API call). */
   date?: string;
   slot?: string;
+  /** what the model suggested for this slot — logged so we can tell manual overrides apart. */
+  suggestedId?: number;
 }
 
 export interface SwapResult extends SwapRequest {

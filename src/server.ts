@@ -125,6 +125,15 @@ const server = createServer(async (req, res) => {
       const client = await loggedInClient();
       const results = await applySwaps(client, swaps);
       logApply(results, { mode: 'apply' });
+      // Re-fetch the resulting state (no LLM) and snapshot it, confirming the swaps stuck.
+      if (results.some((r) => r.ok)) {
+        try {
+          const confirm = await buildPlan(client, { ...cfg, guidelines: freshGuidelines() }, { days: cfg.horizonDays, decide: false });
+          logPlan(confirm, { mode: 'post-apply', model: cfg.model });
+        } catch {
+          // best-effort: a missing confirmation snapshot must not fail the apply
+        }
+      }
       return send(res, 200, { results });
     }
 

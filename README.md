@@ -101,11 +101,16 @@ what you ended up with. See "Run history" below.
 Every `dry-run` and `apply` (CLI **and** web) appends a snapshot to `data/snapshots.jsonl`
 (append-only JSONL, gitignored, zero deps) recording, per day/slot: the current dish, **all**
 alternatives that were offered, the model's pick + reason, and — for applies — what was committed.
-The web UI's **History** section collapses this into one entry per delivery date (latest snapshot
-wins, annotated with the choice you applied), so you can later review past decisions and tune
-`GUIDELINES.md`. Note it only captures days you actually run against while they're still editable —
-keep the scheduled `apply` (below) running so no day slips by unlogged. Path overridable via
-`DIETLY_LOG_PATH`.
+Right after an `apply` succeeds it also re-fetches the resulting menu (no model call) and logs a
+`post-apply` snapshot, so the log confirms the swaps actually stuck.
+
+The web UI's **History** section collapses this into one entry per delivery date. It shows the
+current state (post-apply where applicable), and when you **overrode** the model in the UI it marks
+both the model's suggestion (`🤖 model suggested`) and what you actually picked (`✓ chosen`) — the
+override is recorded on the apply itself, so a later reload can't erase it. Use it to review past
+decisions and tune `GUIDELINES.md`. Only days you run against while they're still editable get
+captured — keep the scheduled `apply` (below) running so no day slips by unlogged. Path overridable
+via `DIETLY_LOG_PATH`.
 
 ## Configuration
 

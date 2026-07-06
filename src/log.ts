@@ -61,6 +61,8 @@ export interface AppliedSwap {
   date: string | null;
   slot: string | null;
   chosenId: number;
+  /** what the model had suggested for this slot (may differ from chosenId → manual override) */
+  suggestedId: number | null;
   ok: boolean;
   error: string | null;
 }
@@ -145,6 +147,7 @@ export function logApply(results: SwapResult[], meta: { mode: string; now?: stri
       date: r.date ?? null,
       slot: r.slot ?? null,
       chosenId: r.dietCaloriesMealId,
+      suggestedId: r.suggestedId ?? null,
       ok: r.ok,
       error: r.error ?? null,
     })),
@@ -175,6 +178,10 @@ export function readLog(): LogRecord[] {
 export interface HistorySlot extends LoggedSlot {
   /** id we actually applied for this slot (from an apply record), if any */
   appliedId: number | null;
+  /** the model's pick (from the apply record when available, else the decision snapshot) */
+  modelSuggestedId: number;
+  /** true when we applied something other than the model's pick (a manual override) */
+  overridden: boolean;
 }
 export interface HistoryDay extends Omit<LoggedDay, 'slots'> {
   loggedAt: string;
@@ -182,28 +189,63 @@ export interface HistoryDay extends Omit<LoggedDay, 'slots'> {
 }
 
 /**
- * Collapse the append-only log into one entry per delivery date: the most recent plan snapshot
- * wins (menus/options are stable once published), annotated with the choice actually applied.
- * Newest date first. Pure — safe to unit-test.
+ * Collapse the append-only log into one entry per delivery date. Newest date first. Pure.
+ *
+ * Two snapshot streams are kept apart on purpose:
+ *  - the LATEST snapshot (any mode) gives the current dish + offered options — so a `post-apply`
+ *    snapshot correctly shows the committed state (#2);
+ *  - the latest DECISION snapshot (mode !== 'post-apply') gives the model's suggestion + reason,
+ *    so a keep-all confirmation snapshot doesn't erase why the model chose what it did.
+ * The model's original pick for an applied slot is taken from the apply record itself, which is
+ * immune to later snapshots overwriting the suggestion after a web-UI reload (#3).
  */
 export function buildHistory(records: LogRecord[]): { days: HistoryDay[] } {
-  const byDate = new Map<string, LoggedDay & { loggedAt: string }>();
-  const applied = new Map<string, number>(); // `${date}|${slot}` -> chosenId (latest successful)
+  const latest = new Map<string, LoggedDay & { loggedAt: string }>();
+  const decision = new Map<string, LoggedDay>();
+  const applied = new Map<string, { chosenId: number; suggestedId: number | null }>();
 
   for (const r of records) {
     if (r.kind === 'plan') {
-      for (const day of r.days) byDate.set(day.date, { ...day, loggedAt: r.ts });
+      for (const day of r.days) {
+        latest.set(day.date, { ...day, loggedAt: r.ts });
+        if (r.mode !== 'post-apply') decision.set(day.date, day);
+      }
     } else {
       for (const res of r.results) {
-        if (res.ok && res.date && res.slot) applied.set(`${res.date}|${res.slot}`, res.chosenId);
+        if (res.ok && res.date && res.slot) {
+          applied.set(`${res.date}|${res.slot}`, { chosenId: res.chosenId, suggestedId: res.suggestedId });
+        }
       }
     }
   }
 
-  const days: HistoryDay[] = [...byDate.values()].map((day) => ({
-    ...day,
-    slots: day.slots.map((s) => ({ ...s, appliedId: applied.get(`${day.date}|${s.slot}`) ?? null })),
-  }));
+  const days: HistoryDay[] = [...latest.values()].map((day) => {
+    const dec = decision.get(day.date);
+    const decBySlot = new Map((dec?.slots ?? []).map((s) => [s.slot, s]));
+    return {
+      orderId: day.orderId,
+      date: day.date,
+      deliveryId: day.deliveryId,
+      editable: day.editable,
+      loggedAt: day.loggedAt,
+      slots: day.slots.map((s) => {
+        const d = decBySlot.get(s.slot) ?? s; // suggestion + reason come from the decision snapshot
+        const a = applied.get(`${day.date}|${s.slot}`);
+        const modelSuggestedId = a?.suggestedId ?? d.suggestedId;
+        const appliedId = a?.chosenId ?? null;
+        return {
+          ...s, // current*, options, editable, currentVariant, slot — from the latest snapshot
+          suggestedId: d.suggestedId,
+          suggestedName: d.suggestedName,
+          willChange: d.willChange,
+          reason: d.reason,
+          modelSuggestedId,
+          appliedId,
+          overridden: appliedId != null && appliedId !== modelSuggestedId,
+        };
+      }),
+    };
+  });
   days.sort((a, b) => b.date.localeCompare(a.date));
   return { days };
 }

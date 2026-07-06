@@ -51,6 +51,7 @@
       .tag.suggested { background:var(--accent); color:#fff; }
       .tag.chosen { background:var(--change); color:#fff; }
       .hist-date { display:flex; gap:10px; align-items:baseline; }
+      .override { color:var(--change); font-size:12px; font-weight:600; }
       .opt.readonly { cursor:default; }
       .opt.readonly:hover { border-color:var(--line); }
       .locked-note { color:var(--muted); font-size:12px; }
@@ -180,6 +181,7 @@
             slot.dataset.order = day.orderId; slot.dataset.delivery = day.deliveryId;
             slot.dataset.mealid = s.deliveryMealId; slot.dataset.current = s.currentId;
             slot.dataset.date = day.date; slot.dataset.slotname = s.slot;
+            slot.dataset.suggested = s.suggestedId;
           }
           const reason = s.reason && (s.willChange || s.reason !== 'keep') ? `<span class="reason">${esc(s.reason)}</span>` : '';
           slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}</div>`;
@@ -227,7 +229,7 @@
           .map((s) => ({
             orderId: Number(s.dataset.order), deliveryId: Number(s.dataset.delivery),
             deliveryMealId: Number(s.dataset.mealid), dietCaloriesMealId: Number(selectedId(s)),
-            date: s.dataset.date, slot: s.dataset.slotname,
+            date: s.dataset.date, slot: s.dataset.slotname, suggestedId: Number(s.dataset.suggested),
             label: s.querySelector('.opt.selected .name').textContent,
           }));
       }
@@ -280,16 +282,24 @@
             <span class="badge">${day.editable ? 'was editable' : '🔒 locked'}</span>
             <span class="muted" style="font-size:11px">logged ${esc((day.loggedAt || '').slice(0, 10))}</span></h3>`;
           for (const s of day.slots) {
-            // What we ended up with: the applied choice if any, else the model's suggestion.
-            const chosenId = s.appliedId != null ? s.appliedId : s.suggestedId;
+            const applied = s.appliedId;               // what we committed (null if never applied)
+            const model = s.modelSuggestedId;          // what the model picked
+            const chosen = applied != null ? applied : model; // the option to highlight
             const slot = document.createElement('div');
             slot.className = 'slot';
             const reason = s.reason && (s.willChange || s.reason !== 'keep') ? `<span class="reason">${esc(s.reason)}</span>` : '';
-            slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}</div>`;
+            const override = s.overridden ? '<span class="override">✋ you overrode the model’s pick</span>' : '';
+            slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}${override}</div>`;
             const opts = document.createElement('div'); opts.className = 'opts';
             const list = s.options.length ? s.options
               : [{ id: s.currentId, name: s.currentName, kcal: s.currentKcal, variant: s.currentVariant }];
-            opts.innerHTML = list.map((o) => historyCard(o, o.id === chosenId, o.id === s.currentId)).join('');
+            opts.innerHTML = list.map((o) => {
+              let tag = '';
+              if (o.id === chosen) tag = applied != null ? '<span class="tag chosen">✓ chosen</span>' : '<span class="tag suggested">🤖 model pick</span>';
+              else if (o.id === model && s.overridden) tag = '<span class="tag suggested">🤖 model suggested</span>';
+              else if (o.id === s.currentId) tag = '<span class="tag current">was current</span>';
+              return historyCard(o, o.id === chosen, tag);
+            }).join('');
             slot.appendChild(opts);
             el.appendChild(slot);
           }
@@ -297,11 +307,9 @@
         }
       }
 
-      function historyCard(o, isChosen, isCurrent) {
-        const tag = isChosen ? '<span class="tag chosen">✓ chosen</span>'
-                  : isCurrent ? '<span class="tag current">was current</span>' : '';
+      function historyCard(o, selected, tag) {
         const top = (o.variant ? `<span class="variant">${esc(o.variant)}</span>` : '') + tag;
-        return `<div class="opt readonly${isChosen ? ' selected' : ''}">
+        return `<div class="opt readonly${selected ? ' selected' : ''}">
           <div class="opt-top">${top}</div>
           <div class="name">${esc(o.name)}</div>
           <div class="meta">${kcal(o.kcal)}</div>

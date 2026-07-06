@@ -128,6 +128,7 @@ async function main(): Promise<void> {
           label: `${day.date} ${d.slot} → ${d.chosenDish}`,
           date: day.date,
           slot: d.slot,
+          suggestedId: d.chosenId, // CLI applies the model's pick, so suggested == applied
         });
       }
     }
@@ -156,6 +157,17 @@ async function main(): Promise<void> {
     console.log(`  ${r.ok ? '✅' : '❌'} ${r.label ?? ''}${r.error ? `: ${r.error}` : ''}`);
   }
   console.log(`Applied ${results.filter((r) => r.ok).length}/${results.length} changes.`);
+
+  // Re-fetch the resulting state (no LLM) and snapshot it, so the log confirms the swaps stuck.
+  if (results.some((r) => r.ok)) {
+    try {
+      const confirm = await buildPlan(client, cfg, { days: horizon, order: args.order, decide: false });
+      logPlan(confirm, { mode: 'post-apply', model: cfg.model });
+      console.log('Recorded a post-apply snapshot of the resulting menu.');
+    } catch (e) {
+      console.warn(`  ⚠️  could not record post-apply snapshot (${(e as Error).message})`);
+    }
+  }
 }
 
 main().catch((e) => {

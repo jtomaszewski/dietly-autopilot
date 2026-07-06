@@ -99,9 +99,9 @@ test('buildHistory merges the applied choice and keeps the latest snapshot per d
     // Two dry-run snapshots for the same day (latest should win) …
     logPlan(samplePlan(), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:00:00.000Z' });
     logPlan(samplePlan(), { mode: 'dry-run', model: 'm', now: '2026-07-06T10:00:00.000Z' });
-    // … then an apply that committed option #2.
+    // … then an apply that committed the model's pick (#2), suggested == chosen.
     const results: SwapResult[] = [
-      { orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', ok: true },
+      { orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', suggestedId: 2, ok: true },
     ];
     logApply(results, { mode: 'apply', now: '2026-07-06T11:00:00.000Z' });
 
@@ -109,6 +109,7 @@ test('buildHistory merges the applied choice and keeps the latest snapshot per d
     assert.equal(days.length, 1);
     assert.equal(days[0]!.loggedAt, '2026-07-06T10:00:00.000Z');
     assert.equal(days[0]!.slots[0]!.appliedId, 2);
+    assert.equal(days[0]!.slots[0]!.overridden, false);
   });
 });
 
@@ -116,10 +117,60 @@ test('buildHistory ignores failed applies', () => {
   withLog(() => {
     logPlan(samplePlan(), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:00:00.000Z' });
     const results: SwapResult[] = [
-      { orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', ok: false, error: 'boom' },
+      { orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', suggestedId: 2, ok: false, error: 'boom' },
     ];
     logApply(results, { mode: 'apply', now: '2026-07-06T11:00:00.000Z' });
     const { days } = buildHistory(readLog());
     assert.equal(days[0]!.slots[0]!.appliedId, null);
+  });
+});
+
+test('a post-apply snapshot updates current state but keeps the model suggestion + reason', () => {
+  withLog(() => {
+    // Model suggested #2 (a change) …
+    logPlan(samplePlan(), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:00:00.000Z' });
+    // … we applied it, then a keep-all confirmation snapshot recorded current == #2.
+    logApply(
+      [{ orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', suggestedId: 2, ok: true }],
+      { mode: 'apply', now: '2026-07-06T09:05:00.000Z' },
+    );
+    const confirm = samplePlan();
+    const slot = confirm.days[0]!.slots[0]!;
+    slot.current = { ...slot.current, dietCaloriesMealId: 2, menuMealName: 'Schab w sosie grzybowym' };
+    confirm.days[0]!.decisions = [
+      { slot: 'Obiad', currentDish: 'Schab w sosie grzybowym', currentId: 2, chosenDish: 'Schab w sosie grzybowym', chosenId: 2, willChange: false, editable: true, reason: 'keep' },
+    ];
+    logPlan(confirm, { mode: 'post-apply', model: 'm', now: '2026-07-06T09:06:00.000Z' });
+
+    const s = buildHistory(readLog()).days[0]!.slots[0]!;
+    assert.equal(s.currentId, 2); // #2: current now reflects the applied dish
+    assert.equal(s.reason, 'prefer pork today'); // decision snapshot preserved, not the keep-all one
+    assert.equal(s.willChange, true);
+    assert.equal(s.appliedId, 2);
+  });
+});
+
+test('buildHistory flags a manual override via the apply record, even after a reload snapshot', () => {
+  withLog(() => {
+    // Model suggested #2 …
+    logPlan(samplePlan(), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:00:00.000Z' });
+    // … but we manually applied option #3 instead.
+    logApply(
+      [{ orderId: 42, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 3, date: '2026-07-09', slot: 'Obiad', suggestedId: 2, ok: true }],
+      { mode: 'apply', now: '2026-07-06T09:05:00.000Z' },
+    );
+    // A later web-UI reload snapshot now sees #3 as current and suggests keeping it — must NOT
+    // erase the fact that the model originally wanted #2.
+    const reload = samplePlan();
+    reload.days[0]!.slots[0]!.current = { ...reload.days[0]!.slots[0]!.current, dietCaloriesMealId: 3 };
+    reload.days[0]!.decisions = [
+      { slot: 'Obiad', currentDish: 'x', currentId: 3, chosenDish: 'x', chosenId: 3, willChange: false, editable: true, reason: 'keep' },
+    ];
+    logPlan(reload, { mode: 'dry-run', model: 'm', now: '2026-07-06T09:10:00.000Z' });
+
+    const s = buildHistory(readLog()).days[0]!.slots[0]!;
+    assert.equal(s.appliedId, 3);
+    assert.equal(s.modelSuggestedId, 2); // recovered from the apply record
+    assert.equal(s.overridden, true);
   });
 });
