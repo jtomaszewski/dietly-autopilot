@@ -122,6 +122,9 @@ export interface SwapRequest {
   deliveryMealId: number;
   dietCaloriesMealId: number;
   label?: string;
+  /** delivery date + slot name — carried through only so applies can be logged (unused by the API call). */
+  date?: string;
+  slot?: string;
 }
 
 export interface SwapResult extends SwapRequest {

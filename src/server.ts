@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
+import { buildHistory, logApply, logPlan, readLog } from './log.ts';
 import { applySwaps, buildPlan, type PlannedDay, type SwapRequest } from './planner.ts';
 
 const cfg = loadConfig();
@@ -110,6 +111,7 @@ const server = createServer(async (req, res) => {
         { ...cfg, guidelines: freshGuidelines() },
         { days: Number(days) || cfg.horizonDays },
       );
+      logPlan(plan, { mode: 'dry-run', model: cfg.model });
       return send(res, 200, {
         orders: plan.orders.map((o) => ({ orderId: o.orderId, dietName: o.dietName, dietCalories: o.dietCalories })),
         days: plan.days.map(serializeDay),
@@ -122,7 +124,12 @@ const server = createServer(async (req, res) => {
       if (!Array.isArray(swaps) || !swaps.length) return send(res, 400, { error: 'no swaps' });
       const client = await loggedInClient();
       const results = await applySwaps(client, swaps);
+      logApply(results, { mode: 'apply' });
       return send(res, 200, { results });
+    }
+
+    if (req.method === 'GET' && path === '/api/history') {
+      return send(res, 200, buildHistory(readLog()));
     }
 
     return send(res, 404, { error: 'not found' });

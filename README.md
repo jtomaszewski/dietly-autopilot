@@ -92,6 +92,21 @@ reason shown inline. **Override any pick**, then hit **Apply changes**. You can 
 `GUIDELINES.md` right in the browser and reload to re-run the model. Light theme; binds to localhost
 only; your Dietly password and OpenRouter key stay server-side.
 
+Expand **History** to browse past days *after they've locked* — Dietly stops exposing a day's
+alternatives once its edit window closes, so this is the only way to revisit what was on offer and
+what you ended up with. See "Run history" below.
+
+## Run history
+
+Every `dry-run` and `apply` (CLI **and** web) appends a snapshot to `data/snapshots.jsonl`
+(append-only JSONL, gitignored, zero deps) recording, per day/slot: the current dish, **all**
+alternatives that were offered, the model's pick + reason, and — for applies — what was committed.
+The web UI's **History** section collapses this into one entry per delivery date (latest snapshot
+wins, annotated with the choice you applied), so you can later review past decisions and tune
+`GUIDELINES.md`. Note it only captures days you actually run against while they're still editable —
+keep the scheduled `apply` (below) running so no day slips by unlogged. Path overridable via
+`DIETLY_LOG_PATH`.
+
 ## Configuration
 
 `.env` (see `.env.example`):
@@ -104,6 +119,7 @@ only; your Dietly password and OpenRouter key stay server-side.
 | `DIETLY_COMPANY_ID` | `wybormenu` | catering slug (Dietly `company-id` header) |
 | `DIETLY_HORIZON_DAYS` | `14` | how many days ahead to consider |
 | `DIETLY_GUIDELINES_PATH` | `GUIDELINES.md` | path to your guidelines markdown |
+| `DIETLY_LOG_PATH` | `data/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History** |
 
 Your guidelines live in [`GUIDELINES.md`](GUIDELINES.md) — plain English. One LLM call is made
 per editable day (all five slots together, so the per-day shake cap is reasoned about holistically),

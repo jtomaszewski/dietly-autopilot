@@ -49,6 +49,10 @@
       .tag { font-size:10px; padding:1px 7px; border-radius:20px; font-weight:600; }
       .tag.current { background:#eef0f3; color:#4b5563; }
       .tag.suggested { background:var(--accent); color:#fff; }
+      .tag.chosen { background:var(--change); color:#fff; }
+      .hist-date { display:flex; gap:10px; align-items:baseline; }
+      .opt.readonly { cursor:default; }
+      .opt.readonly:hover { border-color:var(--line); }
       .locked-note { color:var(--muted); font-size:12px; }
 
       #bar { position:sticky; bottom:0; background:var(--card); border-top:1px solid var(--line); padding:12px 20px;
@@ -80,6 +84,12 @@
         <span id="guidelinesStatus" class="muted"></span>
       </details>
       <div id="plan"></div>
+
+      <details id="historyBox" style="margin-top:22px">
+        <summary>History — what was on offer on past days (from your run log)</summary>
+        <div style="margin:8px 0 0"><button id="refreshHistory">Refresh</button> <span id="historyStatus" class="muted"></span></div>
+        <div id="history"></div>
+      </details>
     </main>
 
     <div id="bar">
@@ -169,6 +179,7 @@
           if (s.editable) {
             slot.dataset.order = day.orderId; slot.dataset.delivery = day.deliveryId;
             slot.dataset.mealid = s.deliveryMealId; slot.dataset.current = s.currentId;
+            slot.dataset.date = day.date; slot.dataset.slotname = s.slot;
           }
           const reason = s.reason && (s.willChange || s.reason !== 'keep') ? `<span class="reason">${esc(s.reason)}</span>` : '';
           slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}</div>`;
@@ -216,6 +227,7 @@
           .map((s) => ({
             orderId: Number(s.dataset.order), deliveryId: Number(s.dataset.delivery),
             deliveryMealId: Number(s.dataset.mealid), dietCaloriesMealId: Number(selectedId(s)),
+            date: s.dataset.date, slot: s.dataset.slotname,
             label: s.querySelector('.opt.selected .name').textContent,
           }));
       }
@@ -242,6 +254,59 @@
           $('applyBtn').disabled = false;
         }
       };
+
+      // ---- history (read-only log of past runs) ----
+      $('historyBox').addEventListener('toggle', (e) => { if (e.target.open && !$('history').dataset.loaded) loadHistory(); });
+      $('refreshHistory').onclick = loadHistory;
+      async function loadHistory() {
+        $('historyStatus').innerHTML = '<span class="spinner"></span> loading…';
+        try {
+          const { days } = await api('/api/history');
+          renderHistory(days);
+          $('history').dataset.loaded = '1';
+          $('historyStatus').textContent = days.length ? `${days.length} day(s) logged` : 'No runs logged yet — load a plan first.';
+        } catch (e) {
+          $('historyStatus').innerHTML = '<span class="err">' + esc(e.message) + '</span>';
+        }
+      }
+
+      function renderHistory(days) {
+        const root = $('history');
+        root.innerHTML = '';
+        for (const day of days) {
+          const el = document.createElement('div');
+          el.className = 'day';
+          el.innerHTML = `<h3 class="hist-date">${day.date}
+            <span class="badge">${day.editable ? 'was editable' : '🔒 locked'}</span>
+            <span class="muted" style="font-size:11px">logged ${esc((day.loggedAt || '').slice(0, 10))}</span></h3>`;
+          for (const s of day.slots) {
+            // What we ended up with: the applied choice if any, else the model's suggestion.
+            const chosenId = s.appliedId != null ? s.appliedId : s.suggestedId;
+            const slot = document.createElement('div');
+            slot.className = 'slot';
+            const reason = s.reason && (s.willChange || s.reason !== 'keep') ? `<span class="reason">${esc(s.reason)}</span>` : '';
+            slot.innerHTML = `<div class="slot-head"><span class="slot-name">${esc(s.slot)}</span>${reason}</div>`;
+            const opts = document.createElement('div'); opts.className = 'opts';
+            const list = s.options.length ? s.options
+              : [{ id: s.currentId, name: s.currentName, kcal: s.currentKcal, variant: s.currentVariant }];
+            opts.innerHTML = list.map((o) => historyCard(o, o.id === chosenId, o.id === s.currentId)).join('');
+            slot.appendChild(opts);
+            el.appendChild(slot);
+          }
+          root.appendChild(el);
+        }
+      }
+
+      function historyCard(o, isChosen, isCurrent) {
+        const tag = isChosen ? '<span class="tag chosen">✓ chosen</span>'
+                  : isCurrent ? '<span class="tag current">was current</span>' : '';
+        const top = (o.variant ? `<span class="variant">${esc(o.variant)}</span>` : '') + tag;
+        return `<div class="opt readonly${isChosen ? ' selected' : ''}">
+          <div class="opt-top">${top}</div>
+          <div class="name">${esc(o.name)}</div>
+          <div class="meta">${kcal(o.kcal)}</div>
+        </div>`;
+      }
 
       api('/api/config').then((c) => { $('modelInfo').textContent = `model: ${c.model} · ${c.companyId}`; $('days').value = c.horizonDays; });
     </script>

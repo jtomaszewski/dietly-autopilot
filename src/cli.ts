@@ -11,6 +11,7 @@
 import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
 import type { SlotDecision, SlotInput } from './llm.ts';
+import { logApply, logPlan } from './log.ts';
 import { applySwaps, buildPlan, type PlannedDay, type SwapRequest } from './planner.ts';
 
 interface Args {
@@ -91,10 +92,12 @@ async function main(): Promise<void> {
   await client.login(cfg.email, cfg.password);
 
   const today = new Date().toLocaleDateString('en-CA');
-  const { orders, days, unpublishedByOrder } = await buildPlan(client, cfg, {
+  const plan = await buildPlan(client, cfg, {
     days: horizon,
     order: args.order,
   });
+  const { orders, days, unpublishedByOrder } = plan;
+  logPlan(plan, { mode: args.mode, model: cfg.model });
 
   if (!orders.length) {
     console.log('No active orders found for', cfg.companyId);
@@ -123,6 +126,8 @@ async function main(): Promise<void> {
           deliveryMealId: meal.current.deliveryMealId,
           dietCaloriesMealId: d.chosenId,
           label: `${day.date} ${d.slot} → ${d.chosenDish}`,
+          date: day.date,
+          slot: d.slot,
         });
       }
     }
@@ -146,6 +151,7 @@ async function main(): Promise<void> {
 
   console.log('Applying …');
   const results = await applySwaps(client, pendingSwaps);
+  logApply(results, { mode: args.mode });
   for (const r of results) {
     console.log(`  ${r.ok ? '✅' : '❌'} ${r.label ?? ''}${r.error ? `: ${r.error}` : ''}`);
   }
