@@ -89,7 +89,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && path === '/api/config') {
-      return send(res, 200, { model: cfg.model, companyId: cfg.companyId, horizonDays: cfg.horizonDays });
+      return send(res, 200, { model: cfg.model, horizonDays: cfg.horizonDays });
     }
 
     if (req.method === 'GET' && path === '/api/guidelines') {
@@ -113,7 +113,12 @@ const server = createServer(async (req, res) => {
       );
       logPlan(plan, { mode: 'dry-run', model: cfg.model });
       return send(res, 200, {
-        orders: plan.orders.map((o) => ({ orderId: o.orderId, dietName: o.dietName, dietCalories: o.dietCalories })),
+        orders: plan.orders.map((o) => ({
+          orderId: o.orderId,
+          companyName: o.companyName,
+          dietName: o.dietName,
+          dietCalories: o.dietCalories,
+        })),
         days: plan.days.map(serializeDay),
         unpublished: Object.fromEntries(plan.unpublishedByOrder),
       });

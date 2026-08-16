@@ -157,7 +157,7 @@
         for (const order of plan.orders) {
           const h = document.createElement('div');
           h.className = 'order-h';
-          h.textContent = `Order #${order.orderId} — ${order.dietName}, ${order.dietCalories} kcal`;
+          h.textContent = `Order #${order.orderId} — ${order.companyName ? order.companyName + ' · ' : ''}${order.dietName}, ${order.dietCalories} kcal`;
           root.appendChild(h);
           for (const day of plan.days.filter((d) => d.orderId === order.orderId)) root.appendChild(renderDay(day));
           const u = plan.unpublished[order.orderId] || 0;
@@ -316,7 +316,7 @@
         </div>`;
       }
 
-      api('/api/config').then((c) => { $('modelInfo').textContent = `model: ${c.model} · ${c.companyId}`; $('days').value = c.horizonDays; });
+      api('/api/config').then((c) => { $('modelInfo').textContent = `model: ${c.model}`; $('days').value = c.horizonDays; });
     </script>
   </body>
 </html>

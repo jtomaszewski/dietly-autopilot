@@ -32,7 +32,7 @@ export async function gatherDay(
 ): Promise<SlotInput[]> {
   let menu: MenuMeal[];
   try {
-    menu = await client.getDayMenu(delivery.deliveryId);
+    menu = await client.getDayMenu(orderId, delivery.deliveryId);
   } catch {
     return [];
   }
@@ -72,14 +72,16 @@ export interface Plan {
 /** Build the full plan: which days/slots, and the model's keep/change decision per slot. */
 export async function buildPlan(
   client: DietlyClient,
-  cfg: Pick<Config, 'companyId' | 'guidelines' | 'model' | 'openRouterApiKey'>,
+  cfg: Pick<Config, 'guidelines' | 'model' | 'openRouterApiKey'>,
   opts: { days: number; order?: number; decide?: boolean },
 ): Promise<Plan> {
   const today = todayISO();
   const until = addDays(today, opts.days);
 
+  // Any still-running order counts, whatever catering it belongs to — switching restaurants
+  // shouldn't silently empty the plan (the client resolves the right company-id per order).
   const orders = (await client.getActiveOrders()).filter(
-    (o) => o.companyName === cfg.companyId && o.dateTo >= today && (!opts.order || o.orderId === opts.order),
+    (o) => o.dateTo >= today && (!opts.order || o.orderId === opts.order),
   );
 
   const days: PlannedDay[] = [];

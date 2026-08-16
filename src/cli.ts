@@ -100,7 +100,7 @@ async function main(): Promise<void> {
   logPlan(plan, { mode: args.mode, model: cfg.model });
 
   if (!orders.length) {
-    console.log('No active orders found for', cfg.companyId);
+    console.log('No active orders covering today or later.');
     return;
   }
 
@@ -114,7 +114,9 @@ async function main(): Promise<void> {
   let totalChanges = 0;
 
   for (const order of orders) {
-    console.log(`\n=== Order #${order.orderId} (${order.dietName}, ${order.dietCalories} kcal) ===`);
+    console.log(
+      `\n=== Order #${order.orderId} — ${order.companyName} (${order.dietName}, ${order.dietCalories} kcal) ===`,
+    );
     for (const day of days.filter((d) => d.orderId === order.orderId)) {
       totalChanges += printDay(day, !!args.showOptions);
       for (const d of day.decisions) {

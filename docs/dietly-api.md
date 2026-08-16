@@ -11,6 +11,11 @@ x-launcher-type: BROWSER_DIETLY
 
 After login the app runs on `https://dietly.pl/api/...` (panel.dietly.pl redirects there).
 
+`company-id` is per-catering, not per-account: order-scoped endpoints reject an order whose
+catering differs from the header with **HTTP 490** ("Zamówienie … nie istnieje w tym cateringu").
+Account-wide calls (`/profile`, `/profile/profile-order/all`) work under any slug and return
+orders from every catering — so the right slug per order is read from that list's `companyName`.
+
 ## Auth
 - `POST https://panel.dietly.pl/api/auth/login`
   - body: `application/x-www-form-urlencoded` → `username=<email>&password=<pwd>`

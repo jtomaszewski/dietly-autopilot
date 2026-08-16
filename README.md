@@ -125,7 +125,7 @@ via `DIETLY_LOG_PATH`.
 | `DIETLY_EMAIL` / `DIETLY_PASSWORD` | — | your Dietly login (no MFA supported) |
 | `OPENROUTER_API_KEY` | — | OpenRouter key — the model makes the decisions |
 | `OPENROUTER_MODEL` | `google/gemini-2.5-flash` | any OpenRouter model with structured-output support |
-| `DIETLY_COMPANY_ID` | `wybormenu` | catering slug (Dietly `company-id` header) |
+| `DIETLY_COMPANY_ID` | `wybormenu` | fallback catering slug for account-wide calls; the per-order catering is auto-detected, so you don't need to change this when you switch restaurants |
 | `DIETLY_HORIZON_DAYS` | `14` | how many days ahead to consider |
 | `DIETLY_GUIDELINES_PATH` | `GUIDELINES.md` | path to your guidelines markdown |
 | `DIETLY_LOG_PATH` | `~/.dietly-autopilot/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History**; shared across all checkouts/worktrees |
