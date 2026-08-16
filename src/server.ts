@@ -14,7 +14,8 @@ import { dirname, join } from 'node:path';
 import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
 import { buildHistory, logApply, logPlan, readLog } from './log.ts';
-import { applySwaps, buildPlan, type PlannedDay, type SwapRequest } from './planner.ts';
+import { applySwaps, buildPlan, runningOrders, type PlannedDay, type SwapRequest } from './planner.ts';
+import type { OrderSummary } from './dietly.ts';
 
 const cfg = loadConfig();
 const HOST = process.env.HOST ?? '127.0.0.1';
@@ -30,6 +31,18 @@ async function loggedInClient(): Promise<DietlyClient> {
   const client = new DietlyClient(cfg.companyId);
   await client.login(cfg.email, cfg.password);
   return client;
+}
+
+/** What the order switcher in the browser needs to label each running order. */
+function serializeOrder(o: OrderSummary) {
+  return {
+    orderId: o.orderId,
+    companyName: o.companyName,
+    dietName: o.dietName,
+    dietCalories: o.dietCalories,
+    dateFrom: o.dateFrom,
+    dateTo: o.dateTo,
+  };
 }
 
 /** Flatten a PlannedDay into the shape the browser renders. */
@@ -103,22 +116,24 @@ const server = createServer(async (req, res) => {
       return send(res, 200, { ok: true });
     }
 
+    // Every running order, whatever catering — lets the UI switch orders without a restart.
+    if (req.method === 'GET' && path === '/api/orders') {
+      const client = await loggedInClient();
+      return send(res, 200, { orders: (await runningOrders(client)).map(serializeOrder) });
+    }
+
     if (req.method === 'POST' && path === '/api/plan') {
-      const { days } = await readBody(req);
+      const { days, order } = await readBody(req);
       const client = await loggedInClient();
       const plan = await buildPlan(
         client,
         { ...cfg, guidelines: freshGuidelines() },
-        { days: Number(days) || cfg.horizonDays },
+        { days: Number(days) || cfg.horizonDays, order: Number(order) || undefined },
       );
       logPlan(plan, { mode: 'dry-run', model: cfg.model });
       return send(res, 200, {
-        orders: plan.orders.map((o) => ({
-          orderId: o.orderId,
-          companyName: o.companyName,
-          dietName: o.dietName,
-          dietCalories: o.dietCalories,
-        })),
+        orders: plan.orders.map(serializeOrder),
+        availableOrders: plan.availableOrders.map(serializeOrder),
         days: plan.days.map(serializeDay),
         unpublished: Object.fromEntries(plan.unpublishedByOrder),
       });
@@ -133,7 +148,12 @@ const server = createServer(async (req, res) => {
       // Re-fetch the resulting state (no LLM) and snapshot it, confirming the swaps stuck.
       if (results.some((r) => r.ok)) {
         try {
-          const confirm = await buildPlan(client, { ...cfg, guidelines: freshGuidelines() }, { days: cfg.horizonDays, decide: false });
+          const touched = [...new Set(swaps.map((s) => s.orderId))];
+          const confirm = await buildPlan(
+            client,
+            { ...cfg, guidelines: freshGuidelines() },
+            { days: cfg.horizonDays, order: touched.length === 1 ? touched[0] : undefined, decide: false },
+          );
           logPlan(confirm, { mode: 'post-apply', model: cfg.model });
         } catch {
           // best-effort: a missing confirmation snapshot must not fail the apply

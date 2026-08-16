@@ -21,6 +21,8 @@
       button.primary { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; }
       button:disabled { opacity:.45; cursor:default; }
       input[type=number] { width:60px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px; font:inherit; }
+      select { max-width:340px; background:var(--bg); color:var(--fg); border:1px solid var(--line); border-radius:6px; padding:7px; font:inherit; }
+      button.icon { padding:6px 9px; }
 
       .order-h { margin:22px 0 4px; font-size:14px; color:var(--muted); }
       .day { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin:12px 0; }
@@ -72,6 +74,10 @@
       <h1>🥗 dietly-autopilot</h1>
       <span class="muted" id="modelInfo"></span>
       <span style="flex:1"></span>
+      <label class="muted">order
+        <select id="order" title="Which order/catering to plan for"><option value="">All orders</option></select>
+      </label>
+      <button id="refreshOrders" class="icon" title="Re-check which orders are running (e.g. after switching catering)">↻</button>
       <label class="muted">days <input type="number" id="days" value="14" min="1" max="40" /></label>
       <button id="loadBtn" class="primary">Load plan</button>
       <span id="status" class="muted"></span>
@@ -104,6 +110,8 @@
       const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
       const kcal = (k) => (k != null ? `${k} kcal` : '');
       let plan = null;
+      let historyDays = [];
+      const ORDER_KEY = 'dietly.order';    // remembered across reloads, so a switch sticks
 
       async function api(path, opts) {
         const res = await fetch(path, opts);
@@ -122,6 +130,36 @@
         $('guidelinesStatus').textContent = 'saved ✓ — reload the plan to re-run the model';
       };
 
+      // ---- order switcher ----
+      // The picker is refreshed from every plan response (and on ↻), so a newly started order —
+      // e.g. after switching catering — shows up without restarting the server.
+      const selectedOrder = () => $('order').value;
+
+      function renderOrderPicker(orders) {
+        const sel = $('order');
+        const want = sel.value || localStorage.getItem(ORDER_KEY) || '';
+        sel.innerHTML = '<option value="">All orders</option>' + orders.map((o) =>
+          `<option value="${o.orderId}">${esc(o.companyName)} · ${o.dietCalories} kcal · till ${esc(o.dateTo)} (#${o.orderId})</option>`).join('');
+        sel.value = orders.some((o) => String(o.orderId) === want) ? want : '';
+        localStorage.setItem(ORDER_KEY, sel.value);
+      }
+
+      $('order').onchange = () => {
+        localStorage.setItem(ORDER_KEY, selectedOrder());
+        renderHistory(historyDays);
+        if (plan) loadPlan();
+      };
+
+      $('refreshOrders').onclick = async () => {
+        $('status').innerHTML = '<span class="spinner"></span> checking orders…';
+        try {
+          renderOrderPicker((await api('/api/orders')).orders);
+          $('status').textContent = '';
+        } catch (e) {
+          $('status').innerHTML = '<span class="err">' + esc(e.message) + '</span>';
+        }
+      };
+
       // ---- plan ----
       $('loadBtn').onclick = loadPlan;
       async function loadPlan() {
@@ -129,7 +167,9 @@
         $('status').innerHTML = '<span class="spinner"></span> asking the model (~1 min)…';
         $('plan').innerHTML = '';
         try {
-          plan = await api('/api/plan', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ days: Number($('days').value) }) });
+          const body = JSON.stringify({ days: Number($('days').value), order: Number(selectedOrder()) || undefined });
+          plan = await api('/api/plan', { method:'POST', headers:{ 'Content-Type':'application/json' }, body });
+          renderOrderPicker(plan.availableOrders || plan.orders);
           render();
           $('status').textContent = '';
         } catch (e) {
@@ -263,23 +303,29 @@
       async function loadHistory() {
         $('historyStatus').innerHTML = '<span class="spinner"></span> loading…';
         try {
-          const { days } = await api('/api/history');
-          renderHistory(days);
+          historyDays = (await api('/api/history')).days;
+          renderHistory(historyDays);
           $('history').dataset.loaded = '1';
-          $('historyStatus').textContent = days.length ? `${days.length} day(s) logged` : 'No runs logged yet — load a plan first.';
         } catch (e) {
           $('historyStatus').innerHTML = '<span class="err">' + esc(e.message) + '</span>';
         }
       }
 
-      function renderHistory(days) {
+      function renderHistory(all) {
         const root = $('history');
         root.innerHTML = '';
+        const order = Number(selectedOrder());
+        const days = order ? all.filter((d) => d.orderId === order) : all;
+        const multiOrder = new Set(all.map((d) => d.orderId)).size > 1;
+        $('historyStatus').textContent = days.length
+          ? `${days.length} day(s) logged${order ? ` for order #${order}` : ''}`
+          : all.length ? 'Nothing logged for this order yet.' : 'No runs logged yet — load a plan first.';
         for (const day of days) {
           const el = document.createElement('div');
           el.className = 'day';
           el.innerHTML = `<h3 class="hist-date">${day.date}
             <span class="badge">${day.editable ? 'was editable' : '🔒 locked'}</span>
+            ${multiOrder ? `<span class="badge">order #${day.orderId}</span>` : ''}
             <span class="muted" style="font-size:11px">logged ${esc((day.loggedAt || '').slice(0, 10))}</span></h3>`;
           for (const s of day.slots) {
             const applied = s.appliedId;               // what we committed (null if never applied)
@@ -317,6 +363,9 @@
       }
 
       api('/api/config').then((c) => { $('modelInfo').textContent = `model: ${c.model}`; $('days').value = c.horizonDays; });
+      api('/api/orders')
+        .then((d) => renderOrderPicker(d.orders))
+        .catch((e) => { $('status').innerHTML = '<span class="err">' + esc(e.message) + '</span>'; });
     </script>
   </body>
 </html>

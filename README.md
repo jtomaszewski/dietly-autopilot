@@ -47,7 +47,13 @@ node src/cli.ts dry-run --days 14 --options
 
 # Actually apply the swaps:
 npm run apply                   # or: node src/cli.ts apply --days 14
+
+# Which orders are running right now (any catering) + their ids:
+node src/cli.ts orders          # then scope a run with: --order 37709
 ```
+
+All running orders are planned by default, whatever catering each belongs to — so switching
+restaurant needs no config change. Use `--order ID` to work on just one.
 
 With `--options` each slot lists its alternatives, marked `← kept` / `← new pick` /
 `← current (replaced)`, plus the model's one-line reason per slot:
@@ -65,7 +71,7 @@ With `--options` each slot lists its alternatives, marked `← kept` / `← new 
 Example output:
 
 ```
-=== Order #152698 (Wybór menu, 3000 kcal) ===
+=== Order #152698 — wybormenu (Wybór menu, 3000 kcal) ===
 
   2026-06-15  —  1 change(s)
     ✓  Śniadanie: Sałatka ze słodko-ostrym kurczakiem i dressingiem z awokado
@@ -92,6 +98,11 @@ reason shown inline. **Override any pick**, then hit **Apply changes**. You can 
 `GUIDELINES.md` right in the browser and reload to re-run the model. Light theme; binds to localhost
 only; your Dietly password and OpenRouter key stay server-side.
 
+The **order switcher** in the header picks which order (i.e. which catering) to plan for — *All
+orders* covers every running one at once. Changed restaurant, or started a second order? Hit **↻**
+and it appears; nothing to edit in `.env`, no server restart. Your choice is remembered across
+reloads and also filters the History below.
+
 Expand **History** to browse past days *after they've locked* — Dietly stops exposing a day's
 alternatives once its edit window closes, so this is the only way to revisit what was on offer and
 what you ended up with. See "Run history" below.
@@ -108,7 +119,7 @@ The log lives in your home dir (not the repo) on purpose: one shared history acr
 and git worktree. Point `DIETLY_LOG_PATH` at a repo-relative path if you'd rather keep it per-clone —
 but note such a file is gitignored and won't be shared between worktrees.
 
-The web UI's **History** section collapses this into one entry per delivery date. It shows the
+The web UI's **History** section collapses this into one entry per order + delivery date. It shows the
 current state (post-apply where applicable), and when you **overrode** the model in the UI it marks
 both the model's suggestion (`🤖 model suggested`) and what you actually picked (`✓ chosen`) — the
 override is recorded on the apply itself, so a later reload can't erase it. Use it to review past

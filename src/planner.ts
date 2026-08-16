@@ -64,9 +64,19 @@ export interface PlannedDay {
 }
 
 export interface Plan {
-  orders: OrderSummary[];
+  orders: OrderSummary[]; // the orders this plan covers (all running ones, or the one asked for)
+  /** every running order, whichever catering — what a UI can offer to switch between. */
+  availableOrders: OrderSummary[];
   days: PlannedDay[]; // published days only (locked + editable); excludes not-yet-published
   unpublishedByOrder: Map<number, number>;
+}
+
+/** Active orders that still cover today or later — the ones worth planning / offering in a picker. */
+export async function runningOrders(client: DietlyClient): Promise<OrderSummary[]> {
+  const today = todayISO();
+  return (await client.getActiveOrders())
+    .filter((o) => o.dateTo >= today)
+    .sort((a, b) => a.dateFrom.localeCompare(b.dateFrom));
 }
 
 /** Build the full plan: which days/slots, and the model's keep/change decision per slot. */
@@ -80,9 +90,8 @@ export async function buildPlan(
 
   // Any still-running order counts, whatever catering it belongs to — switching restaurants
   // shouldn't silently empty the plan (the client resolves the right company-id per order).
-  const orders = (await client.getActiveOrders()).filter(
-    (o) => o.dateTo >= today && (!opts.order || o.orderId === opts.order),
-  );
+  const availableOrders = await runningOrders(client);
+  const orders = opts.order ? availableOrders.filter((o) => o.orderId === opts.order) : availableOrders;
 
   const days: PlannedDay[] = [];
   const unpublishedByOrder = new Map<number, number>();
@@ -117,7 +126,7 @@ export async function buildPlan(
     unpublishedByOrder.set(order.orderId, unpublished);
   }
 
-  return { orders, days, unpublishedByOrder };
+  return { orders, availableOrders, days, unpublishedByOrder };
 }
 
 export interface SwapRequest {

@@ -4,6 +4,7 @@
  *
  *   node src/cli.ts dry-run [--days N] [--order ID] [--options]   # report only, writes nothing (default)
  *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
+ *   node src/cli.ts orders                                        # list running orders + their ids
  *
  * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
  * so you can skim each day's menu and decide whether to tweak GUIDELINES.md or pick differently.
@@ -12,17 +13,17 @@ import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
 import type { SlotDecision, SlotInput } from './llm.ts';
 import { logApply, logPlan } from './log.ts';
-import { applySwaps, buildPlan, type PlannedDay, type SwapRequest } from './planner.ts';
+import { applySwaps, buildPlan, runningOrders, type PlannedDay, type SwapRequest } from './planner.ts';
 
 interface Args {
-  mode: 'dry-run' | 'apply';
+  mode: 'dry-run' | 'apply' | 'orders';
   days?: number;
   order?: number;
   showOptions?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const mode = argv[0] === 'apply' ? 'apply' : 'dry-run';
+  const mode = argv[0] === 'apply' ? 'apply' : argv[0] === 'orders' ? 'orders' : 'dry-run';
   const args: Args = { mode };
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
@@ -90,6 +91,16 @@ async function main(): Promise<void> {
   const client = new DietlyClient(cfg.companyId);
   console.log(`Logging in as ${cfg.email} …`);
   await client.login(cfg.email, cfg.password);
+
+  // `orders` just lists what's running — handy to grab an id for --order (multiple cateries).
+  if (args.mode === 'orders') {
+    const running = await runningOrders(client);
+    if (!running.length) console.log('No active orders covering today or later.');
+    for (const o of running) {
+      console.log(`  #${o.orderId}  ${o.companyName}  ${o.dietName}, ${o.dietCalories} kcal  ${o.dateFrom} → ${o.dateTo}`);
+    }
+    return;
+  }
 
   const today = new Date().toLocaleDateString('en-CA');
   const plan = await buildPlan(client, cfg, {
