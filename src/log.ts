@@ -195,7 +195,9 @@ export interface HistoryDay extends Omit<LoggedDay, 'slots'> {
 }
 
 /**
- * Collapse the append-only log into one entry per delivery date. Newest date first. Pure.
+ * Collapse the append-only log into one entry per order + delivery date. Newest date first. Pure.
+ * (Keyed per order, not per date: two orders — e.g. two cateries around a switch — can deliver on
+ * the same day, and one must not overwrite the other.)
  *
  * Two snapshot streams are kept apart on purpose:
  *  - the LATEST snapshot (any mode) gives the current dish + offered options — so a `post-apply`
@@ -210,23 +212,28 @@ export function buildHistory(records: LogRecord[]): { days: HistoryDay[] } {
   const decision = new Map<string, LoggedDay>();
   const applied = new Map<string, { chosenId: number; suggestedId: number | null }>();
 
+  const dayKey = (orderId: number, date: string) => `${orderId}|${date}`;
+
   for (const r of records) {
     if (r.kind === 'plan') {
       for (const day of r.days) {
-        latest.set(day.date, { ...day, loggedAt: r.ts });
-        if (r.mode !== 'post-apply') decision.set(day.date, day);
+        latest.set(dayKey(day.orderId, day.date), { ...day, loggedAt: r.ts });
+        if (r.mode !== 'post-apply') decision.set(dayKey(day.orderId, day.date), day);
       }
     } else {
       for (const res of r.results) {
         if (res.ok && res.date && res.slot) {
-          applied.set(`${res.date}|${res.slot}`, { chosenId: res.chosenId, suggestedId: res.suggestedId });
+          applied.set(`${res.orderId}|${res.date}|${res.slot}`, {
+            chosenId: res.chosenId,
+            suggestedId: res.suggestedId,
+          });
         }
       }
     }
   }
 
   const days: HistoryDay[] = [...latest.values()].map((day) => {
-    const dec = decision.get(day.date);
+    const dec = decision.get(dayKey(day.orderId, day.date));
     const decBySlot = new Map((dec?.slots ?? []).map((s) => [s.slot, s]));
     return {
       orderId: day.orderId,
@@ -236,7 +243,7 @@ export function buildHistory(records: LogRecord[]): { days: HistoryDay[] } {
       loggedAt: day.loggedAt,
       slots: day.slots.map((s) => {
         const d = decBySlot.get(s.slot) ?? s; // suggestion + reason come from the decision snapshot
-        const a = applied.get(`${day.date}|${s.slot}`);
+        const a = applied.get(`${day.orderId}|${day.date}|${s.slot}`);
         const modelSuggestedId = a?.suggestedId ?? d.suggestedId;
         const appliedId = a?.chosenId ?? null;
         return {
@@ -252,6 +259,6 @@ export function buildHistory(records: LogRecord[]): { days: HistoryDay[] } {
       }),
     };
   });
-  days.sort((a, b) => b.date.localeCompare(a.date));
+  days.sort((a, b) => b.date.localeCompare(a.date) || a.orderId - b.orderId);
   return { days };
 }

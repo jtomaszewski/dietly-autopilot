@@ -40,9 +40,9 @@ const opt = (id: number, name: string, variant: string): SwitchOption => ({
   kcal: 600,
 });
 
-function samplePlan(): Plan {
+function samplePlan(orderId = 42): Plan {
   const day: PlannedDay = {
-    orderId: 42,
+    orderId,
     date: '2026-07-09',
     deliveryId: 7,
     editable: true,
@@ -66,7 +66,7 @@ function samplePlan(): Plan {
       },
     ],
   };
-  return { orders: [], days: [day], unpublishedByOrder: new Map() };
+  return { orders: [], availableOrders: [], days: [day], unpublishedByOrder: new Map() };
 }
 
 test('logPlan writes a readable snapshot with options + suggestion', () => {
@@ -89,7 +89,7 @@ test('logPlan writes a readable snapshot with options + suggestion', () => {
 
 test('logPlan with no published days writes nothing', () => {
   withLog(() => {
-    logPlan({ orders: [], days: [], unpublishedByOrder: new Map() }, { mode: 'dry-run', model: 'm' });
+    logPlan({ orders: [], availableOrders: [], days: [], unpublishedByOrder: new Map() }, { mode: 'dry-run', model: 'm' });
     assert.equal(readLog().length, 0);
   });
 });
@@ -147,6 +147,23 @@ test('a post-apply snapshot updates current state but keeps the model suggestion
     assert.equal(s.reason, 'prefer pork today'); // decision snapshot preserved, not the keep-all one
     assert.equal(s.willChange, true);
     assert.equal(s.appliedId, 2);
+  });
+});
+
+test('two orders delivering on the same date stay separate in the history', () => {
+  withLog(() => {
+    logPlan(samplePlan(42), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:00:00.000Z' });
+    logPlan(samplePlan(43), { mode: 'dry-run', model: 'm', now: '2026-07-06T09:01:00.000Z' });
+    // Applied only on order 43 — order 42's identical date/slot must stay untouched.
+    logApply(
+      [{ orderId: 43, deliveryId: 7, deliveryMealId: 1001, dietCaloriesMealId: 2, date: '2026-07-09', slot: 'Obiad', suggestedId: 2, ok: true }],
+      { mode: 'apply', now: '2026-07-06T09:05:00.000Z' },
+    );
+
+    const { days } = buildHistory(readLog());
+    assert.deepEqual(days.map((d) => d.orderId), [42, 43]);
+    assert.equal(days.find((d) => d.orderId === 42)!.slots[0]!.appliedId, null);
+    assert.equal(days.find((d) => d.orderId === 43)!.slots[0]!.appliedId, 2);
   });
 });
 

@@ -102,16 +102,19 @@ function normalizeOption(o: any): SwitchOption {
 
 export class DietlyClient {
   private cookies = new Map<string, string>();
-  private readonly companyId: string;
+  /** Fallback catering slug, used for account-wide calls (login, profile, order list). */
+  private readonly defaultCompanyId: string;
+  /** orderId → catering slug. Order-scoped calls 490 unless company-id matches the order's catering. */
+  private companyByOrder = new Map<number, string>();
 
   constructor(companyId: string) {
-    this.companyId = companyId;
+    this.defaultCompanyId = companyId;
   }
 
-  private headers(extra: Record<string, string> = {}): Record<string, string> {
+  private headers(extra: Record<string, string> = {}, companyId = this.defaultCompanyId): Record<string, string> {
     const h: Record<string, string> = {
       accept: 'application/json',
-      'company-id': this.companyId,
+      'company-id': companyId,
       'x-launcher-type': 'BROWSER_DIETLY',
       ...extra,
     };
@@ -130,20 +133,29 @@ export class DietlyClient {
     }
   }
 
-  private async request(url: string, init: RequestInit = {}): Promise<Response> {
+  private async request(url: string, init: RequestInit = {}, companyId?: string): Promise<Response> {
     const res = await fetch(url, {
       ...init,
-      headers: this.headers(init.headers as Record<string, string>),
+      headers: this.headers(init.headers as Record<string, string>, companyId),
       redirect: 'manual',
     });
     this.storeCookies(res);
     return res;
   }
 
-  private async getJson<T>(url: string): Promise<T> {
-    const res = await this.request(url);
+  private async getJson<T>(url: string, companyId?: string): Promise<T> {
+    const res = await this.request(url, {}, companyId);
     if (!res.ok) throw new HttpError(res.status, `GET ${url}`, await res.text());
     return (await res.json()) as T;
+  }
+
+  /**
+   * The catering an order belongs to. Switching restaurants gives you an order under a different
+   * slug, so the header can't be a fixed setting — it's resolved from the order list and cached.
+   */
+  private async companyFor(orderId: number): Promise<string> {
+    if (!this.companyByOrder.has(orderId)) await this.getActiveOrders();
+    return this.companyByOrder.get(orderId) ?? this.defaultCompanyId;
   }
 
   async login(email: string, password: string): Promise<void> {
@@ -163,16 +175,19 @@ export class DietlyClient {
     const data = await this.getJson<{ results?: OrderSummary[] }>(
       `${API}/profile/profile-order/all?page=0`,
     );
-    return (data.results ?? []).filter((o) => o.status === 'ACTIVE');
+    const active = (data.results ?? []).filter((o) => o.status === 'ACTIVE');
+    for (const o of active) this.companyByOrder.set(o.orderId, o.companyName);
+    return active;
   }
 
   async getOrder(orderId: number): Promise<{ deliveries: Delivery[] }> {
-    return this.getJson(`${API}/company/customer/order/${orderId}`);
+    return this.getJson(`${API}/company/customer/order/${orderId}`, await this.companyFor(orderId));
   }
 
-  async getDayMenu(deliveryId: number): Promise<MenuMeal[]> {
+  async getDayMenu(orderId: number, deliveryId: number): Promise<MenuMeal[]> {
     const data = await this.getJson<{ deliveryMenuMeal?: unknown[] }>(
       `${API}/company/general/menus/delivery/${deliveryId}/new`,
+      await this.companyFor(orderId),
     );
     return (data.deliveryMenuMeal ?? []).map(normalizeMenuMeal);
   }
@@ -184,6 +199,7 @@ export class DietlyClient {
   ): Promise<SwitchOption[]> {
     const data = await this.getJson<{ mealChangeOptions?: unknown[] }>(
       `${API}/company/customer/order/${orderId}/deliveries/${deliveryId}/delivery-meals/${deliveryMealId}/switch`,
+      await this.companyFor(orderId),
     );
     return (data.mealChangeOptions ?? []).map(normalizeOption);
   }
@@ -198,7 +214,7 @@ export class DietlyClient {
     const url =
       `${API}/company/customer/order/${orderId}/deliveries/${deliveryId}` +
       `/delivery-meals/${deliveryMealId}/switch?amount=${amount}&dietCaloriesMealId=${dietCaloriesMealId}`;
-    const res = await this.request(url, { method: 'PUT' });
+    const res = await this.request(url, { method: 'PUT' }, await this.companyFor(orderId));
     if (!res.ok) throw new HttpError(res.status, 'swap', await res.text());
   }
 }
