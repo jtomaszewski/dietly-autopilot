@@ -6,6 +6,9 @@
 
 const PANEL = 'https://panel.dietly.pl/api';
 const API = 'https://dietly.pl/api';
+// Dietly rate-limits (429) non-browser clients on login, so present as the SPA running in Chrome.
+const USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
 
 export interface OrderSummary {
   orderId: number;
@@ -116,11 +119,15 @@ export class DietlyClient {
       accept: 'application/json',
       'company-id': companyId,
       'x-launcher-type': 'BROWSER_DIETLY',
+      'user-agent': USER_AGENT,
       ...extra,
     };
     if (this.cookies.size) {
       h.cookie = [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
     }
+    // Spring double-submit CSRF: echo the XSRF-TOKEN cookie back as a header (POST/PUT 403 without it).
+    const xsrf = this.cookies.get('XSRF-TOKEN');
+    if (xsrf) h['x-xsrf-token'] = decodeURIComponent(xsrf);
     return h;
   }
 
@@ -134,9 +141,10 @@ export class DietlyClient {
   }
 
   private async request(url: string, init: RequestInit = {}, companyId?: string): Promise<Response> {
+    const { origin } = new URL(url);
     const res = await fetch(url, {
       ...init,
-      headers: this.headers(init.headers as Record<string, string>, companyId),
+      headers: this.headers({ origin, referer: `${origin}/`, ...(init.headers as Record<string, string>) }, companyId),
       redirect: 'manual',
     });
     this.storeCookies(res);
@@ -159,6 +167,8 @@ export class DietlyClient {
   }
 
   async login(email: string, password: string): Promise<void> {
+    // Any API response sets the XSRF-TOKEN cookie; an unauthenticated /profile (401) is enough.
+    await this.request(`${PANEL}/profile`);
     const res = await this.request(`${PANEL}/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
