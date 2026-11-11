@@ -113,8 +113,14 @@ async function replay(cfg: ReturnType<typeof loadConfig>): Promise<void> {
     decideDayLLM({ slots, guidelines, date, model: cfg.model, apiKey: cfg.openRouterApiKey }),
   );
   const mark = (id: number, userId: number) => (id === userId ? '✓' : '✗');
+  const dishName = (c: (typeof corrections)[number], id: number) => {
+    const slot = c.day.slots.find((s) => s.slot === c.slot)!;
+    const name = id === slot.currentId ? slot.currentName : slot.options.find((o) => o.id === id)?.name;
+    return id === slot.currentId ? `(kept) ${name}` : (name ?? '?');
+  };
   for (const { correction: c, baselineId, learnedId } of results) {
     console.log(`  ${mark(baselineId, c.userId)} → ${mark(learnedId, c.userId)}  ${c.date} ${c.slot}: you chose ${c.userName}`);
+    if (baselineId !== c.userId) console.log(`           model picked: ${dishName(c, baselineId)}`);
   }
   const score = (key: 'baselineId' | 'learnedId') => results.filter((r) => r[key] === r.correction.userId).length;
   console.log(`\nMatches your choice — guidelines only: ${score('baselineId')}/${results.length}, with past corrections: ${score('learnedId')}/${results.length}`);

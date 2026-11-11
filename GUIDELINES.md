@@ -8,13 +8,24 @@ zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: 
 - **Wegański / wege ser** — wegańska feta, wegański twaróg, „ser" z nerkowców lub nasion,
   wegańska mozzarella. Cokolwiek, co jest imitacją białego sera.
 - **Wege / sojowe „mięso"** — kotlety sojowe, tofu jako zamiennik mięsa, seitan, wegańskie wersje
-  dań mięsnych. (Zwykły *sos* sojowy w normalnym daniu jest w porządku.)
+  dań mięsnych, a także **wegetariańskie imitacje mięsnych dań** w każdym posiłku: klopsiki,
+  kotlety, burgery czy pulpety z warzyw, buraków, ciecierzycy lub soczewicy. (Zwykły *sos* sojowy
+  w normalnym daniu jest w porządku.)
 
 ## Unikaj (zamień na coś lepszego, jeśli istnieje dobra opcja)
 - **Słodkie owsianki i kasze na śniadanie** — konkretnie: owsianka, jaglanka, kasza manna.
-  Tych nie lubię. **Wyjątki, które są OK (nie zamieniaj):** budyń, ryżanka / pudding ryżowy oraz
-  dania z ryżu na mleku (np. „kakaowy ryż na mleku") — ryż jest w porządku.
-- **Ciężkie gulasze / potrawki** — gulasz, potrawka.
+  Tych nie lubię. **Wyjątki na śniadanie, które są OK (nie zamieniaj):** budyń, ryżanka / pudding
+  ryżowy oraz dania z ryżu na mleku (np. „kakaowy ryż na mleku") — ryż jest w porządku.
+- **Ciężkie gulasze / potrawki / zapiekanki** — gulasz, potrawka, kugiel.
+- **Grzyby w roli głównej** — risotto grzybowe, dania w sosie grzybowym / z leśnych grzybów,
+  pieczarki jako główny składnik. Zamień, jeśli jest dobra opcja; przy wyborze zamiennika omijaj
+  dania z grzybami.
+- **Bezmięsny obiad lub kolacja** — jeśli obecne danie na Obiad/Kolację nie ma mięsa ani ryby
+  (np. risotto, warzywne kotleciki/medaliony/klopsiki, sałatka z serem), a wśród opcji jest danie
+  z kurczakiem, innym mięsem lub rybą, zamień na nie.
+- **Desery jako przekąska** — na II Śniadanie i Podwieczorek nie chcę słodkich deserów ani ciast
+  (budyń, brownie, szarlotka, deser rafaello, ciasto, panna cotta). Zamień na wytrawną przekąskę
+  (gzik, pasta z pieczywem, placuszki warzywne), zupę albo smoothie.
 - **Kasza jako dodatek** — kasza (gryczana, pęczak, jaglana itp.) jako baza/dodatek do obiadu lub
   kolacji nuży mi się ostatnio. Nie banuj jej, ale jeśli danie w slocie ma kaszę jako główny
   dodatek i wśród opcji jest porównywalnie dobre danie z innym dodatkiem (ryż, ziemniaki, makaron),
@@ -23,6 +34,9 @@ zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: 
 
 ## Preferuj (przy wyborze zamiennika skłaniaj się ku tym — mniej więcej w kolejności priorytetu)
 1. **Dania na bazie jajek** — omlet, frittata, jajecznica, pasty jajeczne. Mój ulubiony typ śniadania.
+   Równie dobre na śniadanie są **słodkie wypieki i placki** — racuchy, muffinki, placuszki,
+   naleśniki. Zamieniając owsiankę lub inne słabe śniadanie, wybierz jedno z tych dwóch; ciężkie
+   mięsne śniadanie (kiełbasa, boczek) to gorszy wybór.
 2. **Kurczak.**
 3. Ryby, makaron, wołowina — wszystkie mile widziane.
 4. **Kuchnia meksykańska** — tacos, burrito, quesadilla, nachos, guacamole, chili, fajitas itp.
