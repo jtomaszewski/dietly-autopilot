@@ -19,7 +19,10 @@ orders from every catering — so the right slug per order is read from that lis
 ## Auth
 - `POST https://panel.dietly.pl/api/auth/login`
   - body: `application/x-www-form-urlencoded` → `username=<email>&password=<pwd>`
-  - 200, empty body, sets httpOnly session cookie. Reuse cookie jar for all later calls.
+  - 200, sets httpOnly `SESSION` cookie. Reuse cookie jar for all later calls.
+  - CSRF (Spring double-submit): any API response sets an `XSRF-TOKEN` cookie (e.g. an
+    unauthenticated `GET /api/profile` → 401); echo it as the `X-XSRF-TOKEN` header, else **403**.
+  - Non-browser User-Agents get **429** on login; send a Chrome UA + `Origin`/`Referer`.
 - No MFA. Verify with `GET /api/profile` → 200.
 
 ## Read

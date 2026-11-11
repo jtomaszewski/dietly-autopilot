@@ -5,30 +5,48 @@
  *   node src/cli.ts dry-run [--days N] [--order ID] [--options]   # report only, writes nothing (default)
  *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
  *   node src/cli.ts orders                                        # list running orders + their ids
+ *   node src/cli.ts replay                                        # how often the model now matches your past overrides
+ *
+ * --email mails a summary of every published upcoming day's menu to DIETLY_SUMMARY_TO when the run ends,
+ * or the error if it fails — meant for the weekly scheduled `apply` (scripts/install-schedule.sh).
  *
  * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
  * so you can skim each day's menu and decide whether to tweak GUIDELINES.md or pick differently.
  */
 import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
-import type { SlotDecision, SlotInput } from './llm.ts';
-import { logApply, logPlan } from './log.ts';
-import { applySwaps, buildPlan, runningOrders, type PlannedDay, type SwapRequest } from './planner.ts';
+import { extractCorrections, replayCorrections } from './corrections.ts';
+import { decideDayLLM, type SlotDecision, type SlotInput } from './llm.ts';
+import { logApply, logPlan, readLog } from './log.ts';
+import { sendEmail } from './mail.ts';
+import {
+  applySwaps,
+  buildPlan,
+  runningOrders,
+  todayISO,
+  type Plan,
+  type PlannedDay,
+  type SwapRequest,
+  type SwapResult,
+} from './planner.ts';
+import { renderSummaryEmail, summarizeDays } from './summary.ts';
 
 interface Args {
-  mode: 'dry-run' | 'apply' | 'orders';
+  mode: 'dry-run' | 'apply' | 'orders' | 'replay';
   days?: number;
   order?: number;
   showOptions?: boolean;
+  email?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
-  const mode = argv[0] === 'apply' ? 'apply' : argv[0] === 'orders' ? 'orders' : 'dry-run';
+  const mode = (['apply', 'orders', 'replay'] as const).find((m) => m === argv[0]) ?? 'dry-run';
   const args: Args = { mode };
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
     else if (argv[i] === '--order') args.order = Number(argv[++i]);
     else if (argv[i] === '--options' || argv[i] === '--full') args.showOptions = true;
+    else if (argv[i] === '--email') args.email = true;
   }
   return args;
 }
@@ -83,9 +101,35 @@ function printDay(day: PlannedDay, showOptions: boolean): number {
   return changes.length;
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+/** Replay past overrides and report how often the model picks what the user chose. */
+async function replay(cfg: ReturnType<typeof loadConfig>): Promise<void> {
+  const corrections = extractCorrections(readLog());
+  if (!corrections.length) {
+    console.log('No manual overrides in the run log yet — nothing to replay.');
+    return;
+  }
+  console.log(`Replaying ${corrections.length} override(s) with ${cfg.model} …\n`);
+  const results = await replayCorrections(corrections, cfg.guidelines, (slots, guidelines, date) =>
+    decideDayLLM({ slots, guidelines, date, model: cfg.model, apiKey: cfg.openRouterApiKey }),
+  );
+  const mark = (id: number, userId: number) => (id === userId ? '✓' : '✗');
+  const dishName = (c: (typeof corrections)[number], id: number) => {
+    const slot = c.day.slots.find((s) => s.slot === c.slot)!;
+    const name = id === slot.currentId ? slot.currentName : slot.options.find((o) => o.id === id)?.name;
+    return id === slot.currentId ? `(kept) ${name}` : (name ?? '?');
+  };
+  for (const { correction: c, baselineId, learnedId } of results) {
+    console.log(`  ${mark(baselineId, c.userId)} → ${mark(learnedId, c.userId)}  ${c.date} ${c.slot}: you chose ${c.userName}`);
+    if (baselineId !== c.userId) console.log(`           model picked: ${dishName(c, baselineId)}`);
+  }
+  const score = (key: 'baselineId' | 'learnedId') => results.filter((r) => r[key] === r.correction.userId).length;
+  console.log(`\nMatches your choice — guidelines only: ${score('baselineId')}/${results.length}, with past corrections: ${score('learnedId')}/${results.length}`);
+  console.log('(each day is replayed without its own corrections, from names + kcal only)');
+}
+
+async function main(args: Args): Promise<void> {
   const cfg = loadConfig();
+  if (args.mode === 'replay') return replay(cfg);
   const horizon = args.days ?? cfg.horizonDays;
 
   const client = new DietlyClient(cfg.companyId);
@@ -102,7 +146,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const today = new Date().toLocaleDateString('en-CA');
+  const today = todayISO();
   const plan = await buildPlan(client, cfg, {
     days: horizon,
     order: args.order,
@@ -156,13 +200,30 @@ async function main(): Promise<void> {
 
   if (args.mode === 'dry-run') {
     console.log('DRY RUN — nothing was written. Re-run with `apply` to make these changes.');
-    return;
-  }
-  if (!pendingSwaps.length) {
+  } else if (!pendingSwaps.length) {
     console.log('Nothing to apply.');
-    return;
   }
+  const { results, after } =
+    args.mode === 'apply' && pendingSwaps.length
+      ? await applyAndConfirm(client, cfg, args, horizon, pendingSwaps)
+      : { results: args.mode === 'apply' ? [] : null, after: null };
 
+  if (args.email) {
+    const unpublished = [...unpublishedByOrder.values()].reduce((a, b) => a + b, 0);
+    const email = renderSummaryEmail(summarizeDays(plan, results, after), args.mode, unpublished);
+    await sendEmail(cfg.summaryTo, email.subject, email.html);
+    console.log(`Emailed the menu summary to ${cfg.summaryTo}.`);
+  }
+}
+
+/** Apply the swaps, then re-fetch the resulting menu (no LLM) so the log confirms they stuck. */
+async function applyAndConfirm(
+  client: DietlyClient,
+  cfg: ReturnType<typeof loadConfig>,
+  args: Args,
+  horizon: number,
+  pendingSwaps: SwapRequest[],
+): Promise<{ results: SwapResult[]; after: Plan | null }> {
   console.log('Applying …');
   const results = await applySwaps(client, pendingSwaps);
   logApply(results, { mode: args.mode });
@@ -171,19 +232,30 @@ async function main(): Promise<void> {
   }
   console.log(`Applied ${results.filter((r) => r.ok).length}/${results.length} changes.`);
 
-  // Re-fetch the resulting state (no LLM) and snapshot it, so the log confirms the swaps stuck.
-  if (results.some((r) => r.ok)) {
-    try {
-      const confirm = await buildPlan(client, cfg, { days: horizon, order: args.order, decide: false });
-      logPlan(confirm, { mode: 'post-apply', model: cfg.model });
-      console.log('Recorded a post-apply snapshot of the resulting menu.');
-    } catch (e) {
-      console.warn(`  ⚠️  could not record post-apply snapshot (${(e as Error).message})`);
-    }
+  if (!results.some((r) => r.ok)) return { results, after: null };
+  try {
+    const after = await buildPlan(client, cfg, { days: horizon, order: args.order, decide: false });
+    logPlan(after, { mode: 'post-apply', model: cfg.model });
+    console.log('Recorded a post-apply snapshot of the resulting menu.');
+    return { results, after };
+  } catch (e) {
+    console.warn(`  ⚠️  could not record post-apply snapshot (${(e as Error).message})`);
+    return { results, after: null };
   }
 }
 
-main().catch((e) => {
-  console.error('Error:', e instanceof Error ? e.message : e);
+const args = parseArgs(process.argv.slice(2));
+main(args).catch(async (e) => {
+  const message = e instanceof Error ? e.message : String(e);
+  console.error('Error:', message);
+  if (args.email) {
+    // A silent failure would leave the week unpicked unnoticed — say so in the inbox instead.
+    try {
+      const to = process.env.DIETLY_SUMMARY_TO ?? process.env.DIETLY_EMAIL;
+      if (to) await sendEmail(to, '⚠️ dietly-autopilot run failed', `<p>The ${args.mode} run failed:</p><pre>${message.replace(/</g, '&lt;')}</pre>`);
+    } catch (mailErr) {
+      console.error('Could not email the failure:', (mailErr as Error).message);
+    }
+  }
   process.exit(1);
 });

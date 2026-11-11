@@ -48,6 +48,13 @@ node src/cli.ts dry-run --days 14 --options
 # Actually apply the swaps:
 npm run apply                   # or: node src/cli.ts apply --days 14
 
+# …and email yourself next week's menu (see "Running on a schedule"):
+node src/cli.ts apply --email
+
+# How often would the model pick what you picked when you overrode it in the web UI?
+# Re-run after editing GUIDELINES.md to check you didn't make it worse.
+node src/cli.ts replay
+
 # Which orders are running right now (any catering) + their ids:
 node src/cli.ts orders          # then scope a run with: --order 37709
 ```
@@ -139,6 +146,9 @@ via `DIETLY_LOG_PATH`.
 | `DIETLY_COMPANY_ID` | `wybormenu` | fallback catering slug for account-wide calls; the per-order catering is auto-detected, so you don't need to change this when you switch restaurants |
 | `DIETLY_HORIZON_DAYS` | `14` | how many days ahead to consider |
 | `DIETLY_GUIDELINES_PATH` | `GUIDELINES.md` | path to your guidelines markdown |
+| `DIETLY_SUMMARY_TO` | `DIETLY_EMAIL` | recipient of the `--email` menu summary |
+| `RESEND_API_KEY` | — | Resend key used to send that email |
+| `DIETLY_SUMMARY_FROM` | — | sender, on a Resend-verified domain, e.g. `Dietly <dietly@yourdomain>` |
 | `DIETLY_LOG_PATH` | `~/.dietly-autopilot/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History**; shared across all checkouts/worktrees |
 
 Your guidelines live in [`GUIDELINES.md`](GUIDELINES.md) — plain English. One LLM call is made
@@ -147,12 +157,29 @@ at `temperature 0` with a strict JSON schema.
 
 ## Running on a schedule
 
-Editing closes ~1.5 days before each delivery, so run every couple of days to catch newly
-opened days. Any scheduler works, e.g. cron:
+Editing closes ~1.5 days before each delivery, and menus are published only ~6–10 days ahead, so
+run at least weekly. On macOS, install the bundled launchd job — it runs `apply --email` every
+Saturday at 08:00 (or as soon as the Mac wakes, if it was asleep):
+
+```bash
+scripts/install-schedule.sh                       # Saturdays 08:00
+WEEKDAY=5 HOUR=7 scripts/install-schedule.sh      # or Fridays 07:00 (0 = Sunday … 6 = Saturday)
+launchctl kickstart gui/$(id -u)/com.dietly-autopilot.weekly   # run it right now
+scripts/install-schedule.sh --uninstall
+```
+
+Output goes to `~/.dietly-autopilot/weekly.log`. The job runs whatever is checked out in this repo.
+
+`--email` (any `apply` / `dry-run`) mails `DIETLY_SUMMARY_TO` (default: your Dietly email) the menu
+for **every published upcoming day**: each slot's dish + kcal, with ✏️ on what the run switched and why,
+plus how many later days Dietly hasn't published yet.
+If the run fails, it emails the error instead. Mail goes through [Resend](https://resend.com): set
+`RESEND_API_KEY` and `DIETLY_SUMMARY_FROM` (an address on a domain verified in Resend) in `.env`.
+
+Elsewhere, any scheduler works, e.g. cron:
 
 ```cron
-# 08:00 every other day
-0 8 */2 * * cd /path/to/dietly-autopilot && /usr/bin/node src/cli.ts apply >> autopilot.log 2>&1
+0 8 * * 6 cd /path/to/dietly-autopilot && /usr/bin/node src/cli.ts apply --email >> autopilot.log 2>&1
 ```
 
 ## How it works

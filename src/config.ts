@@ -11,6 +11,8 @@ export interface Config {
   guidelines: string;
   /** Where the guidelines markdown lives (so the server can re-read/save it live). */
   guidelinesPath: string;
+  /** Recipient of the `--email` run summary (defaults to the Dietly login email). */
+  summaryTo: string;
 }
 
 /** Minimal .env loader (no dependency). Existing process.env wins. */
@@ -60,5 +62,6 @@ export function loadConfig(): Config {
     model: process.env.OPENROUTER_MODEL ?? 'google/gemini-2.5-flash',
     guidelines,
     guidelinesPath,
+    summaryTo: process.env.DIETLY_SUMMARY_TO ?? email,
   };
 }
