@@ -25,6 +25,9 @@ zamienić je na jedną z dostępnych alternatyw. Dania są po polsku (catering: 
 1. **Dania na bazie jajek** — omlet, frittata, jajecznica, pasty jajeczne. Mój ulubiony typ śniadania.
 2. **Kurczak.**
 3. Ryby, makaron, wołowina — wszystkie mile widziane.
+4. **Kuchnia meksykańska** — tacos, burrito, quesadilla, nachos, guacamole, chili, fajitas itp.
+   Lubię ją: obecne danie meksykańskie zostawiaj (nie zamieniaj go na „lepszą" kategorię, np.
+   jajka), a przy zamianie innego dania chętnie wybieraj opcję meksykańską.
 
 ## Twarde ograniczenia
 - **Najwyżej jeden shake / koktajl / smoothie dziennie.** Jeden shake dziennie jest całkowicie
