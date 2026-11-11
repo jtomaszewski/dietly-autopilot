@@ -6,7 +6,7 @@
  *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
  *   node src/cli.ts orders                                        # list running orders + their ids
  *
- * --email mails a summary of next week's menu (Mon–Sun) to DIETLY_SUMMARY_TO when the run ends,
+ * --email mails a summary of every published upcoming day's menu to DIETLY_SUMMARY_TO when the run ends,
  * or the error if it fails — meant for the weekly scheduled `apply` (scripts/install-schedule.sh).
  *
  * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
@@ -27,7 +27,7 @@ import {
   type SwapRequest,
   type SwapResult,
 } from './planner.ts';
-import { nextWeek, renderWeeklyEmail, summarizeDays } from './summary.ts';
+import { renderSummaryEmail, summarizeDays } from './summary.ts';
 
 interface Args {
   mode: 'dry-run' | 'apply' | 'orders';
@@ -180,9 +180,10 @@ async function main(args: Args): Promise<void> {
       : { results: args.mode === 'apply' ? [] : null, after: null };
 
   if (args.email) {
-    const email = renderWeeklyEmail(summarizeDays(plan, results, after), nextWeek(today), args.mode);
+    const unpublished = [...unpublishedByOrder.values()].reduce((a, b) => a + b, 0);
+    const email = renderSummaryEmail(summarizeDays(plan, results, after), args.mode, unpublished);
     await sendEmail(cfg.summaryTo, email.subject, email.html);
-    console.log(`Emailed the weekly summary to ${cfg.summaryTo}.`);
+    console.log(`Emailed the menu summary to ${cfg.summaryTo}.`);
   }
 }
 

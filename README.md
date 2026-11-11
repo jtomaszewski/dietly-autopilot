@@ -142,7 +142,7 @@ via `DIETLY_LOG_PATH`.
 | `DIETLY_COMPANY_ID` | `wybormenu` | fallback catering slug for account-wide calls; the per-order catering is auto-detected, so you don't need to change this when you switch restaurants |
 | `DIETLY_HORIZON_DAYS` | `14` | how many days ahead to consider |
 | `DIETLY_GUIDELINES_PATH` | `GUIDELINES.md` | path to your guidelines markdown |
-| `DIETLY_SUMMARY_TO` | `DIETLY_EMAIL` | recipient of the `--email` weekly summary |
+| `DIETLY_SUMMARY_TO` | `DIETLY_EMAIL` | recipient of the `--email` menu summary |
 | `RESEND_API_KEY` | — | Resend key used to send that email |
 | `DIETLY_SUMMARY_FROM` | — | sender, on a Resend-verified domain, e.g. `Dietly <dietly@yourdomain>` |
 | `DIETLY_LOG_PATH` | `~/.dietly-autopilot/snapshots.jsonl` | append-only run log (menu offered + picks), shown in the web UI **History**; shared across all checkouts/worktrees |
@@ -167,7 +167,8 @@ scripts/install-schedule.sh --uninstall
 Output goes to `~/.dietly-autopilot/weekly.log`. The job runs whatever is checked out in this repo.
 
 `--email` (any `apply` / `dry-run`) mails `DIETLY_SUMMARY_TO` (default: your Dietly email) the menu
-for **next Monday–Sunday**: every slot's dish + kcal, with ✏️ on what the run switched and why.
+for **every published upcoming day**: each slot's dish + kcal, with ✏️ on what the run switched and why,
+plus how many later days Dietly hasn't published yet.
 If the run fails, it emails the error instead. Mail goes through [Resend](https://resend.com): set
 `RESEND_API_KEY` and `DIETLY_SUMMARY_FROM` (an address on a domain verified in Resend) in `.env`.
 

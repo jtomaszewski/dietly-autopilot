@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { MenuMeal } from './dietly.ts';
 import type { SlotDecision } from './llm.ts';
 import type { Plan, PlannedDay } from './planner.ts';
-import { nextWeek, renderWeeklyEmail, summarizeDays } from './summary.ts';
+import { renderSummaryEmail, summarizeDays } from './summary.ts';
 
 const meal = (mealName: string, menuMealName: string, id: number, kcal: number): MenuMeal => ({
   mealName,
@@ -51,12 +51,6 @@ function day(date: string, editable = true): PlannedDay {
 
 const plan = (days: PlannedDay[]): Plan => ({ orders: [], availableOrders: [], days, unpublishedByOrder: new Map() });
 
-test('nextWeek: Saturday → the Monday after tomorrow through Sunday', () => {
-  assert.deepEqual(nextWeek('2026-11-14'), { from: '2026-11-16', to: '2026-11-22' });
-  assert.deepEqual(nextWeek('2026-11-16'), { from: '2026-11-23', to: '2026-11-29' }); // Monday → next Monday
-  assert.deepEqual(nextWeek('2026-11-15'), { from: '2026-11-16', to: '2026-11-22' }); // Sunday → tomorrow
-});
-
 test('dry-run: shows the proposed dish, its kcal, and slots in meal order', () => {
   const [d] = summarizeDays(plan([day('2026-11-16')]), null, null);
   assert.deepEqual(d!.slots.map((s) => s.slot), ['Śniadanie', 'Kolacja']);
@@ -89,15 +83,15 @@ test('apply: the re-fetched menu wins and failed swaps are flagged', () => {
   assert.deepEqual(failed[0]!.slots[1]!.change, { from: 'Kotlety sojowe', reason: 'soy meat', status: 'failed', error: '409' });
 });
 
-test('email covers only next week, counts changes on other days, escapes dish names', () => {
+test('email covers every upcoming day, notes unpublished ones, escapes dish names', () => {
   const days = summarizeDays(plan([day('2026-11-16', false), day('2026-11-17'), day('2026-11-24')]), null, null);
   days[1]!.slots[0]!.dish = 'Jajka <b>&</b> szynka';
-  const { subject, html } = renderWeeklyEmail(days, nextWeek('2026-11-14'), 'dry-run');
-  assert.equal(subject, '🥗 Dietly menu 16 Nov – 22 Nov (1 proposed)');
+  const { subject, html } = renderSummaryEmail(days, 'dry-run', 18);
+  assert.equal(subject, '🥗 Dietly menu 16 Nov – 24 Nov (2 proposed)');
   assert.match(html, /Monday 16 Nov/);
   assert.match(html, /Tuesday 17 Nov/);
-  assert.doesNotMatch(html, /24 Nov/);
-  assert.match(html, /Also proposed 1 meal\(s\) on days outside this week/);
+  assert.match(html, /Tuesday 24 Nov/);
+  assert.match(html, /18 later day\(s\) not published by Dietly yet/);
   assert.match(html, /Jajka &lt;b&gt;&amp;&lt;\/b&gt; szynka/);
   assert.match(html, /🔒/);
 });

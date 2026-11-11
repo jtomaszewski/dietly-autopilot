@@ -1,8 +1,8 @@
 /**
- * Weekly email summary: the menu for the coming Monday–Sunday after a run, with what the run
- * changed (or would change, for dry-run) marked per slot.
+ * Email summary of a run: every published upcoming day's menu, with what the run changed
+ * (or would change, for dry-run) marked per slot.
  */
-import { addDays, type Plan, type SwapResult } from './planner.ts';
+import type { Plan, SwapResult } from './planner.ts';
 
 export interface SummarySlot {
   slot: string;
@@ -20,13 +20,6 @@ export interface SummaryDay {
 
 const SLOT_ORDER = ['Śniadanie', 'II Śniadanie', 'Obiad', 'Podwieczorek', 'Kolacja'];
 const slotRank = (s: string) => (SLOT_ORDER.includes(s) ? SLOT_ORDER.indexOf(s) : 99);
-
-/** Monday–Sunday of the week after `today` (on a Saturday: the day after tomorrow → +8). */
-export function nextWeek(today: string): { from: string; to: string } {
-  const dow = new Date(`${today}T00:00:00`).getDay(); // 0 = Sunday
-  const from = addDays(today, ((8 - dow) % 7) || 7);
-  return { from, to: addDays(from, 6) };
-}
 
 /**
  * Merge a run into per-day menus. `results` are the applied swaps (null for dry-run, where the
@@ -96,37 +89,32 @@ function renderDay(day: SummaryDay, showOrder: boolean): string {
 <table style="border-collapse:collapse;font-size:15px">${day.slots.map(renderSlot).join('')}</table>`;
 }
 
-export interface WeeklyEmail {
+export interface SummaryEmail {
   subject: string;
   html: string;
 }
 
-/** Render the summary email for the days inside `week`; changes on other days are only counted. */
-export function renderWeeklyEmail(
-  days: SummaryDay[],
-  week: { from: string; to: string },
-  mode: 'apply' | 'dry-run',
-): WeeklyEmail {
-  const inWeek = days.filter((d) => d.date >= week.from && d.date <= week.to);
-  const changesIn = (ds: SummaryDay[]) => ds.flatMap((d) => d.slots).filter((s) => s.change).length;
-  const weekChanges = changesIn(inWeek);
-  const otherChanges = changesIn(days.filter((d) => d.date < week.from || d.date > week.to));
-  const failed = days.flatMap((d) => d.slots).filter((s) => s.change?.status === 'failed').length;
+/** Render the summary email covering every published upcoming day in the run. */
+export function renderSummaryEmail(days: SummaryDay[], mode: 'apply' | 'dry-run', unpublished = 0): SummaryEmail {
+  const slots = days.flatMap((d) => d.slots);
+  const changes = slots.filter((s) => s.change).length;
+  const failed = slots.filter((s) => s.change?.status === 'failed').length;
   const showOrder = new Set(days.map((d) => d.orderId)).size > 1;
 
-  const range = `${fmtDate(week.from, { day: 'numeric', month: 'short' })} – ${fmtDate(week.to, { day: 'numeric', month: 'short' })}`;
+  const short = (iso: string) => fmtDate(iso, { day: 'numeric', month: 'short' });
+  const range = days.length ? `${short(days[0]!.date)} – ${short(days.at(-1)!.date)}` : 'upcoming';
   const verb = mode === 'apply' ? 'changed' : 'proposed';
-  const subject = `🥗 Dietly menu ${range}${weekChanges ? ` (${weekChanges} ${verb})` : ''}${failed ? ` ⚠️ ${failed} failed` : ''}`;
+  const subject = `🥗 Dietly menu ${range}${changes ? ` (${changes} ${verb})` : ''}${failed ? ` ⚠️ ${failed} failed` : ''}`;
 
   const notes = [
     mode === 'dry-run' ? 'Dry run — nothing was changed; 💡 marks what the model would switch.' : '',
-    otherChanges ? `Also ${verb} ${otherChanges} meal(s) on days outside this week.` : '',
-    inWeek.some((d) => d.locked) ? '🔒 = past the edit cutoff, shown as delivered.' : '',
+    days.some((d) => d.locked) ? '🔒 = past the edit cutoff, shown as delivered.' : '',
+    unpublished ? `${unpublished} later day(s) not published by Dietly yet — the next run will pick them.` : '',
   ].filter(Boolean);
 
-  const body = inWeek.length
-    ? inWeek.map((d) => renderDay(d, showOrder)).join('\n')
-    : '<p>No published menu for this week yet.</p>';
+  const body = days.length
+    ? days.map((d) => renderDay(d, showOrder)).join('\n')
+    : '<p>No published upcoming menu yet.</p>';
   const html = `<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#222;max-width:720px">
 <h2 style="margin:0 0 8px">Your Dietly menu, ${range}</h2>
 ${notes.map((n) => `<p style="color:#666;margin:4px 0">${esc(n)}</p>`).join('\n')}
