@@ -22,8 +22,6 @@ fi
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 NODE="$(node -p process.execPath)"
-GWS="$(command -v gws || true)"
-[[ -n "$GWS" ]] || { echo "gws not found on PATH — needed to send the summary email." >&2; exit 1; }
 LOG_DIR="$HOME/.dietly-autopilot"
 mkdir -p "$LOG_DIR" "$(dirname "$PLIST")"
 
@@ -43,7 +41,7 @@ cat >"$PLIST" <<PLIST
   <key>WorkingDirectory</key><string>$REPO</string>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>PATH</key><string>$(dirname "$GWS"):$(dirname "$NODE"):/usr/bin:/bin</string>
+    <key>PATH</key><string>$(dirname "$NODE"):/usr/bin:/bin</string>
   </dict>
   <key>StartCalendarInterval</key>
   <dict>
