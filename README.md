@@ -51,6 +51,10 @@ npm run apply                   # or: node src/cli.ts apply --days 14
 # …and email yourself next week's menu (see "Running on a schedule"):
 node src/cli.ts apply --email
 
+# How often would the model pick what you picked when you overrode it in the web UI?
+# Re-run after editing GUIDELINES.md to check you didn't make it worse.
+node src/cli.ts replay
+
 # Which orders are running right now (any catering) + their ids:
 node src/cli.ts orders          # then scope a run with: --order 37709
 ```

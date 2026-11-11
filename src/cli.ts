@@ -5,6 +5,7 @@
  *   node src/cli.ts dry-run [--days N] [--order ID] [--options]   # report only, writes nothing (default)
  *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
  *   node src/cli.ts orders                                        # list running orders + their ids
+ *   node src/cli.ts replay                                        # how often the model now matches your past overrides
  *
  * --email mails a summary of every published upcoming day's menu to DIETLY_SUMMARY_TO when the run ends,
  * or the error if it fails — meant for the weekly scheduled `apply` (scripts/install-schedule.sh).
@@ -14,8 +15,9 @@
  */
 import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
-import type { SlotDecision, SlotInput } from './llm.ts';
-import { logApply, logPlan } from './log.ts';
+import { extractCorrections, replayCorrections } from './corrections.ts';
+import { decideDayLLM, type SlotDecision, type SlotInput } from './llm.ts';
+import { logApply, logPlan, readLog } from './log.ts';
 import { sendEmail } from './mail.ts';
 import {
   applySwaps,
@@ -30,7 +32,7 @@ import {
 import { renderSummaryEmail, summarizeDays } from './summary.ts';
 
 interface Args {
-  mode: 'dry-run' | 'apply' | 'orders';
+  mode: 'dry-run' | 'apply' | 'orders' | 'replay';
   days?: number;
   order?: number;
   showOptions?: boolean;
@@ -38,7 +40,7 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  const mode = argv[0] === 'apply' ? 'apply' : argv[0] === 'orders' ? 'orders' : 'dry-run';
+  const mode = (['apply', 'orders', 'replay'] as const).find((m) => m === argv[0]) ?? 'dry-run';
   const args: Args = { mode };
   for (let i = 1; i < argv.length; i++) {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
@@ -99,8 +101,29 @@ function printDay(day: PlannedDay, showOptions: boolean): number {
   return changes.length;
 }
 
+/** Replay past overrides and report how often the model picks what the user chose. */
+async function replay(cfg: ReturnType<typeof loadConfig>): Promise<void> {
+  const corrections = extractCorrections(readLog());
+  if (!corrections.length) {
+    console.log('No manual overrides in the run log yet — nothing to replay.');
+    return;
+  }
+  console.log(`Replaying ${corrections.length} override(s) with ${cfg.model} …\n`);
+  const results = await replayCorrections(corrections, cfg.guidelines, (slots, guidelines, date) =>
+    decideDayLLM({ slots, guidelines, date, model: cfg.model, apiKey: cfg.openRouterApiKey }),
+  );
+  const mark = (id: number, userId: number) => (id === userId ? '✓' : '✗');
+  for (const { correction: c, baselineId, learnedId } of results) {
+    console.log(`  ${mark(baselineId, c.userId)} → ${mark(learnedId, c.userId)}  ${c.date} ${c.slot}: you chose ${c.userName}`);
+  }
+  const score = (key: 'baselineId' | 'learnedId') => results.filter((r) => r[key] === r.correction.userId).length;
+  console.log(`\nMatches your choice — guidelines only: ${score('baselineId')}/${results.length}, with past corrections: ${score('learnedId')}/${results.length}`);
+  console.log('(each day is replayed without its own corrections, from names + kcal only)');
+}
+
 async function main(args: Args): Promise<void> {
   const cfg = loadConfig();
+  if (args.mode === 'replay') return replay(cfg);
   const horizon = args.days ?? cfg.horizonDays;
 
   const client = new DietlyClient(cfg.companyId);
