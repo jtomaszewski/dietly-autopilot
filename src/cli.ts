@@ -6,6 +6,9 @@
  *   node src/cli.ts apply   [--days N] [--order ID] [--options]   # actually performs the swaps
  *   node src/cli.ts orders                                        # list running orders + their ids
  *
+ * --email mails a summary of next week's menu (Mon–Sun) to DIETLY_SUMMARY_TO when the run ends,
+ * or the error if it fails — meant for the weekly scheduled `apply` (scripts/install-schedule.sh).
+ *
  * --options prints, under each slot, the full list of alternatives (marked: chosen / current),
  * so you can skim each day's menu and decide whether to tweak GUIDELINES.md or pick differently.
  */
@@ -13,13 +16,25 @@ import { loadConfig } from './config.ts';
 import { DietlyClient } from './dietly.ts';
 import type { SlotDecision, SlotInput } from './llm.ts';
 import { logApply, logPlan } from './log.ts';
-import { applySwaps, buildPlan, runningOrders, type PlannedDay, type SwapRequest } from './planner.ts';
+import { sendEmail } from './mail.ts';
+import {
+  applySwaps,
+  buildPlan,
+  runningOrders,
+  todayISO,
+  type Plan,
+  type PlannedDay,
+  type SwapRequest,
+  type SwapResult,
+} from './planner.ts';
+import { nextWeek, renderWeeklyEmail, summarizeDays } from './summary.ts';
 
 interface Args {
   mode: 'dry-run' | 'apply' | 'orders';
   days?: number;
   order?: number;
   showOptions?: boolean;
+  email?: boolean;
 }
 
 function parseArgs(argv: string[]): Args {
@@ -29,6 +44,7 @@ function parseArgs(argv: string[]): Args {
     if (argv[i] === '--days') args.days = Number(argv[++i]);
     else if (argv[i] === '--order') args.order = Number(argv[++i]);
     else if (argv[i] === '--options' || argv[i] === '--full') args.showOptions = true;
+    else if (argv[i] === '--email') args.email = true;
   }
   return args;
 }
@@ -83,8 +99,7 @@ function printDay(day: PlannedDay, showOptions: boolean): number {
   return changes.length;
 }
 
-async function main(): Promise<void> {
-  const args = parseArgs(process.argv.slice(2));
+async function main(args: Args): Promise<void> {
   const cfg = loadConfig();
   const horizon = args.days ?? cfg.horizonDays;
 
@@ -102,7 +117,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const today = new Date().toLocaleDateString('en-CA');
+  const today = todayISO();
   const plan = await buildPlan(client, cfg, {
     days: horizon,
     order: args.order,
@@ -156,13 +171,29 @@ async function main(): Promise<void> {
 
   if (args.mode === 'dry-run') {
     console.log('DRY RUN — nothing was written. Re-run with `apply` to make these changes.');
-    return;
-  }
-  if (!pendingSwaps.length) {
+  } else if (!pendingSwaps.length) {
     console.log('Nothing to apply.');
-    return;
   }
+  const { results, after } =
+    args.mode === 'apply' && pendingSwaps.length
+      ? await applyAndConfirm(client, cfg, args, horizon, pendingSwaps)
+      : { results: args.mode === 'apply' ? [] : null, after: null };
 
+  if (args.email) {
+    const email = renderWeeklyEmail(summarizeDays(plan, results, after), nextWeek(today), args.mode);
+    await sendEmail(cfg.summaryTo, email.subject, email.html);
+    console.log(`Emailed the weekly summary to ${cfg.summaryTo}.`);
+  }
+}
+
+/** Apply the swaps, then re-fetch the resulting menu (no LLM) so the log confirms they stuck. */
+async function applyAndConfirm(
+  client: DietlyClient,
+  cfg: ReturnType<typeof loadConfig>,
+  args: Args,
+  horizon: number,
+  pendingSwaps: SwapRequest[],
+): Promise<{ results: SwapResult[]; after: Plan | null }> {
   console.log('Applying …');
   const results = await applySwaps(client, pendingSwaps);
   logApply(results, { mode: args.mode });
@@ -171,19 +202,30 @@ async function main(): Promise<void> {
   }
   console.log(`Applied ${results.filter((r) => r.ok).length}/${results.length} changes.`);
 
-  // Re-fetch the resulting state (no LLM) and snapshot it, so the log confirms the swaps stuck.
-  if (results.some((r) => r.ok)) {
-    try {
-      const confirm = await buildPlan(client, cfg, { days: horizon, order: args.order, decide: false });
-      logPlan(confirm, { mode: 'post-apply', model: cfg.model });
-      console.log('Recorded a post-apply snapshot of the resulting menu.');
-    } catch (e) {
-      console.warn(`  ⚠️  could not record post-apply snapshot (${(e as Error).message})`);
-    }
+  if (!results.some((r) => r.ok)) return { results, after: null };
+  try {
+    const after = await buildPlan(client, cfg, { days: horizon, order: args.order, decide: false });
+    logPlan(after, { mode: 'post-apply', model: cfg.model });
+    console.log('Recorded a post-apply snapshot of the resulting menu.');
+    return { results, after };
+  } catch (e) {
+    console.warn(`  ⚠️  could not record post-apply snapshot (${(e as Error).message})`);
+    return { results, after: null };
   }
 }
 
-main().catch((e) => {
-  console.error('Error:', e instanceof Error ? e.message : e);
+const args = parseArgs(process.argv.slice(2));
+main(args).catch(async (e) => {
+  const message = e instanceof Error ? e.message : String(e);
+  console.error('Error:', message);
+  if (args.email) {
+    // A silent failure would leave the week unpicked unnoticed — say so in the inbox instead.
+    try {
+      const to = process.env.DIETLY_SUMMARY_TO ?? process.env.DIETLY_EMAIL;
+      if (to) await sendEmail(to, '⚠️ dietly-autopilot run failed', `<p>The ${args.mode} run failed:</p><pre>${message.replace(/</g, '&lt;')}</pre>`);
+    } catch (mailErr) {
+      console.error('Could not email the failure:', (mailErr as Error).message);
+    }
+  }
   process.exit(1);
 });
